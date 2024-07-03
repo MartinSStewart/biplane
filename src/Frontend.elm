@@ -2,15 +2,12 @@ module Frontend exposing (..)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
+import Effect.WebGL
 import Html
-import Html.Attributes as Attr
+import Html.Attributes
 import Lamdera
 import Types exposing (..)
 import Url
-
-
-type alias Model =
-    FrontendModel
 
 
 app =
@@ -25,7 +22,7 @@ app =
         }
 
 
-init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
+init : Url.Url -> Nav.Key -> ( FrontendModel, Cmd FrontendMsg )
 init url key =
     ( { key = key
       , message = "Welcome to Lamdera! You're looking at the auto-generated base implementation. Check out src/Frontend.elm to start coding!"
@@ -34,7 +31,7 @@ init url key =
     )
 
 
-update : FrontendMsg -> Model -> ( Model, Cmd FrontendMsg )
+update : FrontendMsg -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
 update msg model =
     case msg of
         UrlClicked urlRequest ->
@@ -56,24 +53,25 @@ update msg model =
             ( model, Cmd.none )
 
 
-updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
+updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
 updateFromBackend msg model =
     case msg of
         NoOpToFrontend ->
             ( model, Cmd.none )
 
 
-view : Model -> Browser.Document FrontendMsg
+view : FrontendModel -> Browser.Document FrontendMsg
 view model =
-    { title = ""
+    { title = "Biplane!"
     , body =
-        [ Html.div [ Attr.style "text-align" "center", Attr.style "padding-top" "40px" ]
-            [ Html.img [ Attr.src "https://lamdera.app/lamdera-logo-black.png", Attr.width 150 ] []
-            , Html.div
-                [ Attr.style "font-family" "sans-serif"
-                , Attr.style "padding-top" "40px"
-                ]
-                [ Html.text model.message ]
+        [ Effect.WebGL.toHtmlWith
+            [ Effect.WebGL.clearColor 1 1 0 1
             ]
+            [ Html.Attributes.width 200
+            , Html.Attributes.height 200
+            , Html.Attributes.style "width" "200px"
+            , Html.Attributes.style "height" "200px"
+            ]
+            []
         ]
     }
