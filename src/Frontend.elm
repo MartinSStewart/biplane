@@ -2,6 +2,11 @@ module Frontend exposing (..)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
+import Effect.Browser.Events
+import Effect.Browser.Navigation
+import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Lamdera
+import Effect.Time as Time
 import Effect.WebGL
 import Html
 import Html.Attributes
@@ -11,53 +16,57 @@ import Url
 
 
 app =
-    Lamdera.frontend
+    Effect.Lamdera.frontend
+        Lamdera.sendToBackend
         { init = init
         , onUrlRequest = UrlClicked
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = \m -> Sub.none
+        , subscriptions = \m -> Effect.Browser.Events.onAnimationFrame AnimationFrame
         , view = view
         }
 
 
-init : Url.Url -> Nav.Key -> ( FrontendModel, Cmd FrontendMsg )
+init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 init url key =
     ( { key = key
-      , message = "Welcome to Lamdera! You're looking at the auto-generated base implementation. Check out src/Frontend.elm to start coding!"
+      , time = Time.millisToPosix 0
       }
-    , Cmd.none
+    , Command.none
     )
 
 
-update : FrontendMsg -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 update msg model =
     case msg of
         UrlClicked urlRequest ->
             case urlRequest of
                 Internal url ->
                     ( model
-                    , Nav.pushUrl model.key (Url.toString url)
+                    , Effect.Browser.Navigation.pushUrl model.key (Url.toString url)
                     )
 
                 External url ->
                     ( model
-                    , Nav.load url
+                    , Effect.Browser.Navigation.load url
                     )
 
         UrlChanged url ->
-            ( model, Cmd.none )
+            ( model, Command.none )
 
         NoOpFrontendMsg ->
-            ( model, Cmd.none )
+            ( model, Command.none )
+
+        AnimationFrame time ->
+            ( { model | time = time }, Command.none )
 
 
-updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 updateFromBackend msg model =
     case msg of
         NoOpToFrontend ->
-            ( model, Cmd.none )
+            ( model, Command.none )
 
 
 view : FrontendModel -> Browser.Document FrontendMsg
@@ -65,12 +74,11 @@ view model =
     { title = "Biplane!"
     , body =
         [ Effect.WebGL.toHtmlWith
-            [ Effect.WebGL.clearColor 1 1 0 1
-            ]
-            [ Html.Attributes.width 200
-            , Html.Attributes.height 200
-            , Html.Attributes.style "width" "200px"
-            , Html.Attributes.style "height" "200px"
+            [ Effect.WebGL.clearColor 1 1 0 1, Effect.WebGL.depth 1 ]
+            [ Html.Attributes.width 1024
+            , Html.Attributes.height 512
+            , Html.Attributes.style "width" "1024px"
+            , Html.Attributes.style "height" "512px"
             ]
             []
         ]
