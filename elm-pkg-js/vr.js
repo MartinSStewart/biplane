@@ -31,7 +31,7 @@ exports.init = async function init(app)
           console.log(navigator.xr);
           navigator.xr.requestSession('immersive-vr').then((session) => {
             console.log("requested session");
-            onSessionStarted();
+            onSessionStarted(session);
           });
         } else {
           xrSession.end();
