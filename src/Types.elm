@@ -23,6 +23,7 @@ type FrontendMsg
     | UrlChanged Url
     | NoOpFrontendMsg
     | AnimationFrame Time.Posix
+    | PressedEnterVr
 
 
 type ToBackend

@@ -1,4 +1,4 @@
-module Frontend exposing (..)
+port module Frontend exposing (..)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
@@ -10,6 +10,8 @@ import Effect.Time as Time
 import Effect.WebGL
 import Html
 import Html.Attributes
+import Html.Events
+import Json.Encode
 import Lamdera
 import Types exposing (..)
 import Url
@@ -61,6 +63,17 @@ update msg model =
         AnimationFrame time ->
             ( { model | time = time }, Command.none )
 
+        PressedEnterVr ->
+            ( model, requestVr )
+
+
+port requestVrToJs : Json.Encode.Value -> Cmd msg
+
+
+requestVr : Command FrontendOnly toMsg msg
+requestVr =
+    Command.sendToJs "requestVrToJs" requestVrToJs Json.Encode.null
+
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 updateFromBackend msg model =
@@ -73,7 +86,8 @@ view : FrontendModel -> Browser.Document FrontendMsg
 view model =
     { title = "Biplane!"
     , body =
-        [ Effect.WebGL.toHtmlWith
+        [ Html.button [ Html.Events.onClick PressedEnterVr ] [ Html.text "Enter VR" ]
+        , Effect.WebGL.toHtmlWith
             [ Effect.WebGL.clearColor 1 1 0 1, Effect.WebGL.depth 1 ]
             [ Html.Attributes.width 1024
             , Html.Attributes.height 512
