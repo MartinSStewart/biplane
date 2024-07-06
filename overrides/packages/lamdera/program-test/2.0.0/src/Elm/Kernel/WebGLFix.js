@@ -849,7 +849,7 @@ function _WebGLFix_diff(oldModel, newModel) {
 }
 
 var xrSession = null;
-var xrGl = null;
+var xrCanvas = null;
 var xrRefSpace = null;
 
 function _WebGLFix_requestXrStart(dfg) {
@@ -862,15 +862,14 @@ function _WebGLFix_requestXrStart(dfg) {
             if (navigator.xr) {
                 navigator.xr.requestSession('immersive-vr').then((session) => {
                     xrSession = session;
-
                     // Listen for the sessions 'end' event so we can respond if the user
                     // or UA ends the session for any reason.
                     //session.addEventListener('end', onSessionEnded);
 
                     // Create a WebGL context to render with, initialized to be compatible
                     // with the XRDisplay we're presenting to.
-                    let canvas = document.createElement('canvas');
-                    xrGl = canvas.getContext('webgl', { xrCompatible: true });
+                    xrCanvas = document.createElement('canvas');
+                    var xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
                     console.log("3");
                     // Use the new WebGL context to create a XRWebGLLayer and set it as the
                     // sessions baseLayer. This allows any content rendered to the layer to
@@ -921,6 +920,8 @@ function _WebGLFix_renderXrFrame(dfg) {
                     if (pose) {
                         let glLayer = session.renderState.baseLayer;
 
+
+                        var xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
                         // If we do have a valid pose, bind the WebGL layer's framebuffer,
                         // which is where any content to be displayed on the XRDevice must be
                         // rendered.
