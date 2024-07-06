@@ -1,4 +1,4 @@
-port module Frontend exposing (..)
+module Frontend exposing (..)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
@@ -6,6 +6,7 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera
+import Effect.Task
 import Effect.Time as Time
 import Effect.WebGL
 import Html
@@ -64,15 +65,14 @@ update msg model =
             ( { model | time = time }, Command.none )
 
         PressedEnterVr ->
-            ( model, requestVr )
+            ( model, Effect.WebGL.requestXrStart |> Effect.Task.attempt StartedXr )
 
-
-port requestVrToJs : Json.Encode.Value -> Cmd msg
-
-
-requestVr : Command FrontendOnly toMsg msg
-requestVr =
-    Command.sendToJs "requestVrToJs" requestVrToJs Json.Encode.null
+        StartedXr result ->
+            let
+                _ =
+                    Debug.log "StartedXr" result
+            in
+            ( model, Command.none )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )

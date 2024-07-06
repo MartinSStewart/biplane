@@ -4,6 +4,7 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Effect.Browser.Navigation
 import Effect.Time as Time
+import Effect.WebGL
 import Url exposing (Url)
 
 
@@ -24,6 +25,7 @@ type FrontendMsg
     | NoOpFrontendMsg
     | AnimationFrame Time.Posix
     | PressedEnterVr
+    | StartedXr (Result Effect.WebGL.XrStartError Int)
 
 
 type ToBackend

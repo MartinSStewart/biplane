@@ -24,19 +24,6 @@ exports.init = async function init(app)
         }
     }
 
-    app.ports.requestVrToJs.subscribe((a) => {
-        console.log("start");
-        if (!xrSession) {
-          console.log("abc");
-          console.log(navigator.xr);
-          navigator.xr.requestSession('immersive-vr').then((session) => {
-            console.log("requested session");
-            onSessionStarted(session);
-          });
-        } else {
-          xrSession.end();
-        }
-    });
 
     // Called when we've successfully acquired a XRSession. In response we
     // will set up the necessary session state and kick off the frame loop.
