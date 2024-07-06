@@ -11,6 +11,7 @@ import Url exposing (Url)
 type alias FrontendModel =
     { key : Effect.Browser.Navigation.Key
     , time : Time.Posix
+    , isInVr : Bool
     }
 
 
