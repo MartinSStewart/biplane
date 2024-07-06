@@ -520,13 +520,13 @@ toTask simulatedTask =
                 |> Task.andThen (\result -> toTask (function result))
 
         Effect.Internal.RequestXrStart function ->
-            let
-                _ =
-                    Debug.log "RequestXrStart" ()
-            in
             WebGLFix.requestXrStart
                 |> Task.map Ok
                 |> Task.onError (Err >> Task.succeed)
+                |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.RenderXrFrame function ->
+            WebGLFix.renderXrFrame
                 |> Task.andThen (\result -> toTask (function result))
 
 

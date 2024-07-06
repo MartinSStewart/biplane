@@ -7,7 +7,7 @@ module Effect.WebGL exposing
     , clearColor, preserveDrawingBuffer
     , indexedTriangles, lines, lineStrip, lineLoop, points, triangleFan
     , triangleStrip
-    , XrStartError(..), requestXrStart
+    , XrStartError(..), renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -377,3 +377,8 @@ requestXrStart =
                 Err Effect.Internal.NotSupported ->
                     Effect.Internal.Fail NotSupported
         )
+
+
+renderXrFrame : Effect.Task.Task FrontendOnly x Int
+renderXrFrame =
+    Effect.Internal.RenderXrFrame Effect.Internal.Succeed

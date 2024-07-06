@@ -124,6 +124,7 @@ type Task restriction x a
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
     | RequestXrStart (Result XrStartError Int -> Task restriction x a)
+    | RenderXrFrame (Int -> Task restriction x a)
 
 
 type XrStartError
@@ -298,6 +299,9 @@ andThen f task =
         RequestXrStart function ->
             RequestXrStart (function >> andThen f)
 
+        RenderXrFrame function ->
+            RenderXrFrame (function >> andThen f)
+
 
 taskMapError : (x -> y) -> Task restriction x a -> Task restriction y a
 taskMapError f task =
@@ -377,3 +381,6 @@ taskMapError f task =
 
         RequestXrStart function ->
             RequestXrStart (function >> taskMapError f)
+
+        RenderXrFrame function ->
+            RenderXrFrame (function >> taskMapError f)

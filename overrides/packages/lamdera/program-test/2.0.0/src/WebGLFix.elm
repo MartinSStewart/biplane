@@ -4,7 +4,7 @@ module WebGLFix exposing
     , toHtml
     , entityWith, toHtmlWith, Option, alpha, depth, stencil, antialias
     , clearColor, preserveDrawingBuffer
-    , requestXrStart
+    , renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -242,3 +242,8 @@ preserveDrawingBuffer =
 requestXrStart : Task XrStartError Int
 requestXrStart =
     Elm.Kernel.WebGLFix.requestXrStart 123456
+
+
+renderXrFrame : Task x Int
+renderXrFrame =
+    Elm.Kernel.WebGLFix.renderXrFrame 123456

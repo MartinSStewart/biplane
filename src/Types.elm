@@ -26,6 +26,7 @@ type FrontendMsg
     | AnimationFrame Time.Posix
     | PressedEnterVr
     | StartedXr (Result Effect.WebGL.XrStartError Int)
+    | RenderedXrFrame Int
 
 
 type ToBackend

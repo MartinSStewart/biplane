@@ -72,7 +72,15 @@ update msg model =
                 _ =
                     Debug.log "StartedXr" result
             in
-            ( model, Command.none )
+            case result of
+                Ok ok ->
+                    ( model, Effect.WebGL.renderXrFrame |> Effect.Task.perform RenderedXrFrame )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        RenderedXrFrame _ ->
+            ( model, Effect.WebGL.renderXrFrame |> Effect.Task.perform RenderedXrFrame )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )

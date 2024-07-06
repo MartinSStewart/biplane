@@ -849,46 +849,47 @@ function _WebGLFix_diff(oldModel, newModel) {
 }
 
 var xrSession = null;
+var xrGl = null;
+var xrRefSpace = null;
 
 function _WebGLFix_requestXrStart(dfg) {
-    console.log("-1");
     return __Scheduler_binding(function (callback) {
         if (xrSession) {
             callback(__Scheduler_fail(__EI_AlreadyStarted));
         }
         else {
-            console.log("0");
             console.log(navigator.xr);
             if (navigator.xr) {
                 navigator.xr.requestSession('immersive-vr').then((session) => {
-                    console.log("1");
                     xrSession = session;
 
                     // Listen for the sessions 'end' event so we can respond if the user
                     // or UA ends the session for any reason.
                     //session.addEventListener('end', onSessionEnded);
-                    console.log("2");
+
                     // Create a WebGL context to render with, initialized to be compatible
                     // with the XRDisplay we're presenting to.
                     let canvas = document.createElement('canvas');
-                    gl = canvas.getContext('webgl', { xrCompatible: true });
+                    xrGl = canvas.getContext('webgl', { xrCompatible: true });
                     console.log("3");
                     // Use the new WebGL context to create a XRWebGLLayer and set it as the
                     // sessions baseLayer. This allows any content rendered to the layer to
                     // be displayed on the XRDevice.
-                    session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
-                    console.log("4");
+                    session.updateRenderState({ baseLayer: new XRWebGLLayer(session, xrGl) });
+                    console.log("5");
                     // Get a reference space, which is required for querying poses. In this
                     // case an 'local' reference space means that all poses will be relative
                     // to the location where the XRDevice was first detected.
-    //                session.requestReferenceSpace('local').then((refSpace) => {
-    //                  xrRefSpace = refSpace;
-    //
-    //                  // Inform the session that we're ready to begin drawing.
-    //                  session.requestAnimationFrame(onXRFrame);
-    //                });
+                    session.requestReferenceSpace('local').then((refSpace) => {
+                      xrRefSpace = refSpace;
+                      var baseMatrix = refSpace._baseMatrix;
+                      console.log(refSpace);
+                      callback(__Scheduler_succeed(1));
+                      // Inform the session that we're ready to begin drawing.
+                      //session.requestAnimationFrame(onXRFrame);
+                    });
 
-                    callback(__Scheduler_succeed(1));
+
                 });
             }
             else {
@@ -897,3 +898,62 @@ function _WebGLFix_requestXrStart(dfg) {
         }
     });
 }
+
+function _WebGLFix_renderXrFrame(dfg) {
+    return __Scheduler_binding(function (callback) {
+            if (xrSession) {
+                xrSession.requestAnimationFrame((time, frame) => {
+                    let session = frame.session;
+                    console.log("render frame" + time);
+
+                    // Inform the session that we're ready for the next frame.
+                    //session.requestAnimationFrame(onXRFrame);
+
+                    // Get the XRDevice pose relative to the reference space we created
+                    // earlier.
+                    let pose = frame.getViewerPose(xrRefSpace);
+
+                    // Getting the pose may fail if, for example, tracking is lost. So we
+                    // have to check to make sure that we got a valid pose before attempting
+                    // to render with it. If not in this case we'll just leave the
+                    // framebuffer cleared, so tracking loss means the scene will simply
+                    // disappear.
+                    if (pose) {
+                        let glLayer = session.renderState.baseLayer;
+
+                        // If we do have a valid pose, bind the WebGL layer's framebuffer,
+                        // which is where any content to be displayed on the XRDevice must be
+                        // rendered.
+                        xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
+
+                        // Update the clear color so that we can observe the color in the
+                        // headset changing over time.
+                        xrGl.clearColor(Math.cos(time / 2000), Math.cos(time / 4000), Math.cos(time / 6000), 1.0);
+
+                        // Clear the framebuffer
+                        xrGl.clear(xrGl.COLOR_BUFFER_BIT | xrGl.DEPTH_BUFFER_BIT);
+
+                        // Normally you'd loop through each of the views reported by the frame
+                        // and draw them into the corresponding viewport here, but we're
+                        // keeping this sample slim so we're not bothering to draw any
+                        // geometry.
+                        /*for (let view of pose.views) {
+                        let viewport = glLayer.getViewport(view);
+                        gl.viewport(viewport.x, viewport.y,
+                                    viewport.width, viewport.height);
+
+                        // Draw a scene using view.projectionMatrix as the projection matrix
+                        // and view.transform to position the virtual camera. If you need a
+                        // view matrix, use view.transform.inverse.matrix.
+                        }*/
+                    }
+
+                    callback(__Scheduler_succeed(1));
+                });
+            }
+            else {
+                callback(__Scheduler_succeed(0));
+            }
+    });
+}
+
