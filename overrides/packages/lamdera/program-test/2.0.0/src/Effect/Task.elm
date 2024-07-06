@@ -433,5 +433,5 @@ onError f task =
         RequestXrStart function ->
             RequestXrStart (function >> onError f)
 
-        RenderXrFrame function ->
-            RenderXrFrame (function >> onError f)
+        RenderXrFrame entities function ->
+            RenderXrFrame entities (function >> onError f)

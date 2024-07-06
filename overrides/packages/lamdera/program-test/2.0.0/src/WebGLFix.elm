@@ -244,6 +244,6 @@ requestXrStart =
     Elm.Kernel.WebGLFix.requestXrStart 123456
 
 
-renderXrFrame : Task x Int
-renderXrFrame =
-    Elm.Kernel.WebGLFix.renderXrFrame 123456
+renderXrFrame : List Entity -> Task x Int
+renderXrFrame entities =
+    Elm.Kernel.WebGLFix.renderXrFrame entities

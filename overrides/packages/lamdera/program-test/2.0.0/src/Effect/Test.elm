@@ -2472,7 +2472,7 @@ runTask maybeClientId state task =
         RequestXrStart function ->
             function (Err Effect.Internal.NotSupported) |> runTask maybeClientId state
 
-        RenderXrFrame function ->
+        RenderXrFrame _ function ->
             function 0 |> runTask maybeClientId state
 
 

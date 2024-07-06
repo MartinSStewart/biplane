@@ -77,13 +77,13 @@ update msg model =
             in
             case result of
                 Ok _ ->
-                    ( { model | isInVr = True }, WebGL.renderXrFrame |> Effect.Task.perform RenderedXrFrame )
+                    ( { model | isInVr = True }, WebGL.renderXrFrame (entities model) |> Effect.Task.perform RenderedXrFrame )
 
                 Err _ ->
                     ( model, Command.none )
 
         RenderedXrFrame _ ->
-            ( model, WebGL.renderXrFrame |> Effect.Task.perform RenderedXrFrame )
+            ( model, WebGL.renderXrFrame (entities model) |> Effect.Task.perform RenderedXrFrame )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -110,14 +110,18 @@ view model =
             , Html.Attributes.style "width" "1024px"
             , Html.Attributes.style "height" "512px"
             ]
-            [ WebGL.entity
-                vertexShader
-                fragmentShader
-                mesh
-                { perspective = perspective (toFloat (Time.posixToMillis model.time) / 1000) }
-            ]
+            (entities model)
         ]
     }
+
+
+entities model =
+    [ WebGL.entity
+        vertexShader
+        fragmentShader
+        mesh
+        { perspective = perspective (toFloat (Time.posixToMillis model.time) / 1000) }
+    ]
 
 
 perspective : Float -> Mat4

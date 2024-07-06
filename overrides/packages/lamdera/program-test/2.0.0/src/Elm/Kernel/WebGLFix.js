@@ -899,35 +899,27 @@ function _WebGLFix_requestXrStart(dfg) {
     });
 }
 
-function _WebGLFix_renderXrFrame(dfg) {
+function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
             if (xrSession) {
                 xrSession.requestAnimationFrame((time, frame) => {
                     let session = frame.session;
-                    console.log("render frame" + time);
+                    console.log("render frame");
 
-                    // Inform the session that we're ready for the next frame.
-                    //session.requestAnimationFrame(onXRFrame);
-
-                    // Get the XRDevice pose relative to the reference space we created
-                    // earlier.
                     let pose = frame.getViewerPose(xrRefSpace);
 
-                    // Getting the pose may fail if, for example, tracking is lost. So we
-                    // have to check to make sure that we got a valid pose before attempting
-                    // to render with it. If not in this case we'll just leave the
-                    // framebuffer cleared, so tracking loss means the scene will simply
-                    // disappear.
                     if (pose) {
-                          xrRender({ __entities: [], __cache: {}, __options: [] });
 //                        let glLayer = session.renderState.baseLayer;
+//                        xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
+                        xrRender({ __entities: entities, __cache: {}, __options: [] });
+
 //
 //
 //                        var xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
 //                        // If we do have a valid pose, bind the WebGL layer's framebuffer,
 //                        // which is where any content to be displayed on the XRDevice must be
 //                        // rendered.
-//                        xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
+
 //
 //                        // Update the clear color so that we can observe the color in the
 //                        // headset changing over time.
@@ -992,11 +984,6 @@ function xrRender(model) {
       sceneSetting(gl);
     });
 
-    // Activate extensions
-    gl.getExtension('OES_standard_derivatives');
-    gl.getExtension('OES_element_index_uint');
-    gl.getExtension("EXT_frag_depth");
-
     model.__cache.gl = gl;
 
     // Cache the current settings in order to diff them to avoid redundant calls
@@ -1021,8 +1008,6 @@ function xrRender(model) {
     // browsers may have different number of stencil bits
     model.__cache.STENCIL_WRITEMASK = gl.getParameter(gl.STENCIL_WRITEMASK);
 
-
     A2(_WebGLFix_drawGL, model, null);
-
   }
 }

@@ -379,6 +379,6 @@ requestXrStart =
         )
 
 
-renderXrFrame : Effect.Task.Task FrontendOnly x Int
-renderXrFrame =
-    Effect.Internal.RenderXrFrame Effect.Internal.Succeed
+renderXrFrame : List Entity -> Effect.Task.Task FrontendOnly x Int
+renderXrFrame entities =
+    Effect.Internal.RenderXrFrame entities Effect.Internal.Succeed

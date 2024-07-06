@@ -525,8 +525,8 @@ toTask simulatedTask =
                 |> Task.onError (Err >> Task.succeed)
                 |> Task.andThen (\result -> toTask (function result))
 
-        Effect.Internal.RenderXrFrame function ->
-            WebGLFix.renderXrFrame
+        Effect.Internal.RenderXrFrame entities function ->
+            WebGLFix.renderXrFrame entities
                 |> Task.andThen (\result -> toTask (function result))
 
 
