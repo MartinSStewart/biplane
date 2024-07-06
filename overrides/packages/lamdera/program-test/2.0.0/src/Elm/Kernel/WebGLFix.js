@@ -852,6 +852,7 @@ function _WebGLFix_diff(oldModel, newModel) {
 var xrSession = null;
 var xrGl = null;
 var xrRefSpace = null;
+var xrModel = null;
 
 function _WebGLFix_requestXrStart(dfg) {
     return __Scheduler_binding(function (callback) {
@@ -884,9 +885,15 @@ function _WebGLFix_requestXrStart(dfg) {
                       xrRefSpace = refSpace;
                       var baseMatrix = refSpace._baseMatrix;
                       console.log(refSpace);
+
+                      xrModel = { __entities: [], __cache: {}, __options: [] };
+
+                      xrRender(xrModel);
+
                       callback(__Scheduler_succeed(1));
                       // Inform the session that we're ready to begin drawing.
                       //session.requestAnimationFrame(onXRFrame);
+
                     });
 
 
@@ -911,7 +918,9 @@ function _WebGLFix_renderXrFrame(entities) {
                     if (pose) {
 //                        let glLayer = session.renderState.baseLayer;
 //                        xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
-                        xrRender({ __entities: entities, __cache: {}, __options: [] });
+                        //xrRender({ __entities: entities, __cache: {}, __options: [] });
+                        xrModel.__entities = entities;
+                        A2(_WebGLFix_drawGL, xrModel, null);
 
 //
 //
