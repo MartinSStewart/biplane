@@ -3,6 +3,7 @@
 import Elm.Kernel.VirtualDom exposing (custom, doc)
 import WebGLFix.Internal as WI exposing (enableSetting, enableOption)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
+import Effect.Internal as EI exposing (NotSupported, AlreadyStarted)
 
 */
 
@@ -853,7 +854,7 @@ function _WebGLFix_requestXrStart(dfg) {
     console.log("-1");
     return __Scheduler_binding(function (callback) {
         if (xrSession) {
-            callback(__Scheduler_succeed(0));
+            callback(__Scheduler_fail(__EI_AlreadyStarted));
         }
         else {
             console.log("0");
@@ -891,7 +892,7 @@ function _WebGLFix_requestXrStart(dfg) {
                 });
             }
             else {
-                callback(__Scheduler_succeed(-1));
+                callback(__Scheduler_fail(__EI_NotSupported));
             }
         }
     });
