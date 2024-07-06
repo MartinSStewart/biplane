@@ -477,6 +477,7 @@ var _WebGLFix_drawGL = F2(function (model, domNode) {
   _WebGLFix_disableScissor(cache);
   _WebGLFix_disableColorMask(cache);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+  //gl.clearColor(1, 0, 1, 1.0);
 
   function drawEntity(entity) {
     if (!entity.__mesh.b.b) {
@@ -849,7 +850,7 @@ function _WebGLFix_diff(oldModel, newModel) {
 }
 
 var xrSession = null;
-var xrCanvas = null;
+var xrGl = null;
 var xrRefSpace = null;
 
 function _WebGLFix_requestXrStart(dfg) {
@@ -868,8 +869,8 @@ function _WebGLFix_requestXrStart(dfg) {
 
                     // Create a WebGL context to render with, initialized to be compatible
                     // with the XRDisplay we're presenting to.
-                    xrCanvas = document.createElement('canvas');
-                    var xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
+                    var xrCanvas = document.createElement('canvas');
+                    xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
                     console.log("3");
                     // Use the new WebGL context to create a XRWebGLLayer and set it as the
                     // sessions baseLayer. This allows any content rendered to the layer to
@@ -918,21 +919,22 @@ function _WebGLFix_renderXrFrame(dfg) {
                     // framebuffer cleared, so tracking loss means the scene will simply
                     // disappear.
                     if (pose) {
-                        let glLayer = session.renderState.baseLayer;
-
-
-                        var xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
-                        // If we do have a valid pose, bind the WebGL layer's framebuffer,
-                        // which is where any content to be displayed on the XRDevice must be
-                        // rendered.
-                        xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
-
-                        // Update the clear color so that we can observe the color in the
-                        // headset changing over time.
-                        xrGl.clearColor(Math.cos(time / 2000), Math.cos(time / 4000), Math.cos(time / 6000), 1.0);
-
-                        // Clear the framebuffer
-                        xrGl.clear(xrGl.COLOR_BUFFER_BIT | xrGl.DEPTH_BUFFER_BIT);
+                          xrRender({ __entities: [], __cache: {}, __options: [] });
+//                        let glLayer = session.renderState.baseLayer;
+//
+//
+//                        var xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
+//                        // If we do have a valid pose, bind the WebGL layer's framebuffer,
+//                        // which is where any content to be displayed on the XRDevice must be
+//                        // rendered.
+//                        xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
+//
+//                        // Update the clear color so that we can observe the color in the
+//                        // headset changing over time.
+//                        xrGl.clearColor(Math.cos(time / 2000), Math.cos(time / 4000), Math.cos(time / 6000), 1.0);
+//
+//                        // Clear the framebuffer
+//                        xrGl.clear(xrGl.COLOR_BUFFER_BIT | xrGl.DEPTH_BUFFER_BIT);
 
                         // Normally you'd loop through each of the views reported by the frame
                         // and draw them into the corresponding viewport here, but we're
@@ -958,3 +960,69 @@ function _WebGLFix_renderXrFrame(dfg) {
     });
 }
 
+/**
+ *  Creates canvas and schedules initial _WebGLFix_drawGL
+ *  @param {Object} model
+ *  @param {Object} model.__cache that may contain the following properties:
+           gl, shaders, programs, buffers, textures
+ *  @param {List<Option>} model.__options list of options coming from Elm
+ *  @param {List<Entity>} model.__entities list of entities coming from Elm
+ */
+function xrRender(model) {
+  var options = {
+    contextAttributes: {
+      alpha: false,
+      depth: false,
+      stencil: false,
+      antialias: false,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: false
+    },
+    sceneSettings: []
+  };
+
+  _WebGLFix_listEach(function (option) {
+    return A2(__WI_enableOption, options, option);
+  }, model.__options);
+
+  var gl = xrGl;
+
+  if (gl && typeof WeakMap !== 'undefined') {
+    options.sceneSettings.forEach(function (sceneSetting) {
+      sceneSetting(gl);
+    });
+
+    // Activate extensions
+    gl.getExtension('OES_standard_derivatives');
+    gl.getExtension('OES_element_index_uint');
+    gl.getExtension("EXT_frag_depth");
+
+    model.__cache.gl = gl;
+
+    // Cache the current settings in order to diff them to avoid redundant calls
+    // https://emscripten.org/docs/optimizing/Optimizing-WebGL.html#avoid-redundant-calls
+    model.__cache.toggle = false; // used to diff the settings from the previous and current draw calls
+    model.__cache.blend = { enabled: false, toggle: false };
+    model.__cache.depthTest = { enabled: false, toggle: false };
+    model.__cache.stencilTest = { enabled: false, toggle: false };
+    model.__cache.scissor = { enabled: false, toggle: false };
+    model.__cache.colorMask = { enabled: false, toggle: false };
+    model.__cache.cullFace = { enabled: false, toggle: false };
+    model.__cache.polygonOffset = { enabled: false, toggle: false };
+    model.__cache.sampleCoverage = { enabled: false, toggle: false };
+    model.__cache.sampleAlphaToCoverage = { enabled: false, toggle: false };
+
+    model.__cache.shaders = [];
+    model.__cache.programs = {};
+    model.__cache.lastProgId = null;
+    model.__cache.buffers = new WeakMap();
+    model.__cache.textures = new WeakMap();
+    // Memorize the initial stencil write mask, because
+    // browsers may have different number of stencil bits
+    model.__cache.STENCIL_WRITEMASK = gl.getParameter(gl.STENCIL_WRITEMASK);
+
+
+    A2(_WebGLFix_drawGL, model, null);
+
+  }
+}
