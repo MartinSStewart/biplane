@@ -3,7 +3,8 @@
 import Elm.Kernel.VirtualDom exposing (custom, doc)
 import WebGLFix.Internal as WI exposing (enableSetting, enableOption)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
-import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted)
+import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted, LeftEye, RightEye, OtherEye)
+import Elm.Kernel.List exposing (fromArray)
 
 */
 
@@ -912,13 +913,24 @@ function _WebGLFix_renderXrFrame(entities) {
 
             xrSession.requestAnimationFrame((time, frame) => {
                 let pose = frame.getViewerPose(xrReferenceSpace);
-                console.log(pose);
+
                 let err = xrGl.getError();
                 if (err) {
                     console.error(`WebGL error returned: ${err}`);
                 }
 
-                let poseData = { __$transform : new Float64Array(pose.transform.matrix) };
+                let poseData = { __$transform : new Float64Array(pose.transform.matrix)
+                    , __$views : __List_fromArray(
+                        pose.views.map((view) => {
+                                return { __$eye :
+                                    view.eye === "left"
+                                        ? __EI_LeftEye
+                                        : view.eye === "right"
+                                            ? __EI_RightEye
+                                            : __EI_OtherEye
+                                    };
+                            }))
+                    };
 
                 if (pose) {
                     let glLayer = frame.session.renderState.baseLayer;
@@ -934,7 +946,7 @@ function _WebGLFix_renderXrFrame(entities) {
                     }
                 }
 
-                callback(__Scheduler_succeed(1));
+                callback(__Scheduler_succeed(poseData));
             });
         }
         else {

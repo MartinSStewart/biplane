@@ -4,7 +4,7 @@ module WebGLFix exposing
     , toHtml
     , entityWith, toHtmlWith, Option, alpha, depth, stencil, antialias
     , clearColor, preserveDrawingBuffer
-    , Eye, EyeType(..), Pose, renderXrFrame, requestXrStart
+    , Eye, EyeType(..), renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -35,7 +35,7 @@ before trying to do too much with just the documentation provided here.
 
 -}
 
-import Effect.Internal exposing (XrRenderError, XrStartError)
+import Effect.Internal exposing (XrPose, XrRenderError, XrStartError)
 import Elm.Kernel.WebGLFix
 import Html exposing (Attribute, Html)
 import Math.Matrix4 exposing (Mat4)
@@ -245,11 +245,6 @@ requestXrStart options =
     Elm.Kernel.WebGLFix.requestXrStart options
 
 
-type alias Pose =
-    { transform : Mat4
-    }
-
-
 type EyeType
     = Left
     | Right
@@ -261,6 +256,6 @@ type alias Eye =
     }
 
 
-renderXrFrame : List Entity -> Task XrRenderError Int
+renderXrFrame : List Entity -> Task XrRenderError XrPose
 renderXrFrame entities =
     Elm.Kernel.WebGLFix.renderXrFrame entities

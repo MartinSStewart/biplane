@@ -7,7 +7,7 @@ module Effect.WebGL exposing
     , clearColor, preserveDrawingBuffer
     , indexedTriangles, lines, lineStrip, lineLoop, points, triangleFan
     , triangleStrip
-    , XrRenderError(..), XrStartError(..), renderXrFrame, requestXrStart
+    , XrPose, XrRenderError(..), XrStartError(..), renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -53,6 +53,7 @@ import Effect.Command exposing (FrontendOnly)
 import Effect.Internal
 import Effect.Task
 import Html exposing (Attribute, Html)
+import Math.Matrix4 exposing (Mat4)
 import WebGL
 import WebGL.Settings exposing (Setting)
 import WebGLFix
@@ -384,14 +385,48 @@ type XrRenderError
     = XrSessionNotStarted
 
 
-renderXrFrame : List Entity -> Effect.Task.Task FrontendOnly XrRenderError Int
+type alias XrPose =
+    { transform : Mat4
+    , views : List XrView
+    }
+
+
+type alias XrView =
+    { eye : XrEyeType }
+
+
+type XrEyeType
+    = LeftEye
+    | RightEye
+    | OtherEye
+
+
+renderXrFrame : List Entity -> Effect.Task.Task FrontendOnly XrRenderError XrPose
 renderXrFrame entities =
     Effect.Internal.RenderXrFrame
         entities
         (\result ->
             case result of
                 Ok ok ->
-                    Effect.Internal.Succeed ok
+                    Effect.Internal.Succeed
+                        { transform = ok.transform
+                        , views =
+                            List.map
+                                (\view ->
+                                    { eye =
+                                        case view.eye of
+                                            Effect.Internal.LeftEye ->
+                                                LeftEye
+
+                                            Effect.Internal.RightEye ->
+                                                RightEye
+
+                                            Effect.Internal.OtherEye ->
+                                                OtherEye
+                                    }
+                                )
+                                ok.views
+                        }
 
                 Err Effect.Internal.XrSessionNotStarted ->
                     Effect.Internal.Fail XrSessionNotStarted

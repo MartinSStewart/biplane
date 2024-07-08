@@ -71,6 +71,7 @@ import Http
 import Json.Decode
 import Json.Encode
 import List.Nonempty exposing (Nonempty)
+import Math.Matrix4 as Mat4
 import Process
 import Quantity
 import Set exposing (Set)
@@ -2473,7 +2474,7 @@ runTask maybeClientId state task =
             function (Err Effect.Internal.NotSupported) |> runTask maybeClientId state
 
         RenderXrFrame _ function ->
-            function (Ok 0) |> runTask maybeClientId state
+            function (Ok { transform = Mat4.identity, views = [] }) |> runTask maybeClientId state
 
 
 handleHttpResponseWithTestError :

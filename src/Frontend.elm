@@ -80,8 +80,17 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        RenderedXrFrame _ ->
-            ( model, WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame )
+        RenderedXrFrame result ->
+            case result of
+                Ok pose ->
+                    let
+                        _ =
+                            Debug.log "pose" pose
+                    in
+                    ( model, WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame )
+
+                Err _ ->
+                    Debug.todo "RenderedXrFrame error"
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )

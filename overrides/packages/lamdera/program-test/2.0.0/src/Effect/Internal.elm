@@ -18,6 +18,8 @@ module Effect.Internal exposing
     , Task(..)
     , Visibility(..)
     , Wrap(..)
+    , XrEyeType(..)
+    , XrPose
     , XrRenderError(..)
     , XrStartError(..)
     , andThen
@@ -33,6 +35,7 @@ import File
 import Http
 import Json.Decode
 import Json.Encode
+import Math.Matrix4 exposing (Mat4)
 import Time
 import WebGL
 import WebGLFix.Internal
@@ -127,7 +130,23 @@ type Task restriction x a
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
     | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError Int -> Task restriction x a)
-    | RenderXrFrame (List WebGL.Entity) (Result XrRenderError Int -> Task restriction x a)
+    | RenderXrFrame (List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
+
+
+type alias XrPose =
+    { transform : Mat4
+    , views : List XrView
+    }
+
+
+type alias XrView =
+    { eye : XrEyeType }
+
+
+type XrEyeType
+    = LeftEye
+    | RightEye
+    | OtherEye
 
 
 type XrStartError
