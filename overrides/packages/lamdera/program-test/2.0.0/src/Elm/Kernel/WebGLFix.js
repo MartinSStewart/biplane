@@ -464,7 +464,7 @@ var _WebGLFix_drawGL = F2(function (model, domNode) {
     return domNode;
   }
 
-  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+  //gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
 
   if (!cache.depthTest.b) {
     gl.depthMask(true);
@@ -477,7 +477,7 @@ var _WebGLFix_drawGL = F2(function (model, domNode) {
   _WebGLFix_disableScissor(cache);
   _WebGLFix_disableColorMask(cache);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-  //gl.clearColor(1, 0, 1, 1.0);
+  gl.clearColor(1, 0, 1, 1.0);
 
   function drawEntity(entity) {
     if (!entity.__mesh.b.b) {
@@ -851,7 +851,7 @@ function _WebGLFix_diff(oldModel, newModel) {
 
 var xrSession = null;
 var xrGl = null;
-var xrRefSpace = null;
+var xrReferenceSpace = null;
 var xrModel = null;
 
 function _WebGLFix_requestXrStart(dfg) {
@@ -882,7 +882,7 @@ function _WebGLFix_requestXrStart(dfg) {
                     // case an 'local' reference space means that all poses will be relative
                     // to the location where the XRDevice was first detected.
                     session.requestReferenceSpace('local').then((refSpace) => {
-                      xrRefSpace = refSpace;
+                      xrReferenceSpace = refSpace;
                       var baseMatrix = refSpace._baseMatrix;
                       console.log(refSpace);
 
@@ -908,56 +908,36 @@ function _WebGLFix_requestXrStart(dfg) {
 
 function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
-            if (xrSession) {
-                xrSession.requestAnimationFrame((time, frame) => {
-                    let session = frame.session;
-                    console.log("render frame");
+        if (xrSession) {
+            xrSession.requestAnimationFrame((time, frame) => {
+                let pose = frame.getViewerPose(xrReferenceSpace);
 
-                    let pose = frame.getViewerPose(xrRefSpace);
+                let err = xrGl.getError();
+                if (err) {
+                    console.error(`WebGL error returned: ${err}`);
+                }
 
-                    if (pose) {
-//                        let glLayer = session.renderState.baseLayer;
-//                        xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
-                        //xrRender({ __entities: entities, __cache: {}, __options: [] });
-                        xrModel.__entities = entities;
+                if (pose) {
+                    let glLayer = frame.session.renderState.baseLayer;
+
+                    xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
+
+                    xrModel.__entities = entities;
+
+                    for (let view of pose.views) {
+                        let viewport = glLayer.getViewport(view);
+                        xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
                         A2(_WebGLFix_drawGL, xrModel, null);
 
-//
-//
-//                        var xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
-//                        // If we do have a valid pose, bind the WebGL layer's framebuffer,
-//                        // which is where any content to be displayed on the XRDevice must be
-//                        // rendered.
-
-//
-//                        // Update the clear color so that we can observe the color in the
-//                        // headset changing over time.
-//                        xrGl.clearColor(Math.cos(time / 2000), Math.cos(time / 4000), Math.cos(time / 6000), 1.0);
-//
-//                        // Clear the framebuffer
-//                        xrGl.clear(xrGl.COLOR_BUFFER_BIT | xrGl.DEPTH_BUFFER_BIT);
-
-                        // Normally you'd loop through each of the views reported by the frame
-                        // and draw them into the corresponding viewport here, but we're
-                        // keeping this sample slim so we're not bothering to draw any
-                        // geometry.
-                        /*for (let view of pose.views) {
-                        let viewport = glLayer.getViewport(view);
-                        gl.viewport(viewport.x, viewport.y,
-                                    viewport.width, viewport.height);
-
-                        // Draw a scene using view.projectionMatrix as the projection matrix
-                        // and view.transform to position the virtual camera. If you need a
-                        // view matrix, use view.transform.inverse.matrix.
-                        }*/
                     }
+                }
 
-                    callback(__Scheduler_succeed(1));
-                });
-            }
-            else {
-                callback(__Scheduler_succeed(0));
-            }
+                callback(__Scheduler_succeed(1));
+            });
+        }
+        else {
+            callback(__Scheduler_succeed(0));
+        }
     });
 }
 
