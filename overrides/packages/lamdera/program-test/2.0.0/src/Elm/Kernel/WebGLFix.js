@@ -464,7 +464,7 @@ var _WebGLFix_drawGL = F2(function (model, domNode) {
     return domNode;
   }
 
-  //gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
 
   if (!cache.depthTest.b) {
     gl.depthMask(true);
