@@ -920,13 +920,13 @@ function _WebGLFix_renderXrFrame(entities) {
                     let glLayer = frame.session.renderState.baseLayer;
 
                     xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
-
+                    xrGl.clear(xrGl.COLOR_BUFFER_BIT | xrGl.DEPTH_BUFFER_BIT | xrGl.STENCIL_BUFFER_BIT);
                     xrModel.__entities = entities;
 
                     for (let view of pose.views) {
                         let viewport = glLayer.getViewport(view);
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
-                        xrDrawGL(xrModel, null);
+                        xrDrawGL(xrModel);
                     }
                 }
 
@@ -966,6 +966,11 @@ function xrRender(model) {
 
   var gl = xrGl;
 
+  // Activate extensions
+  gl.getExtension('OES_standard_derivatives');
+  gl.getExtension('OES_element_index_uint');
+  gl.getExtension("EXT_frag_depth");
+
   if (gl && typeof WeakMap !== 'undefined') {
     options.sceneSettings.forEach(function (sceneSetting) {
       sceneSetting(gl);
@@ -994,20 +999,16 @@ function xrRender(model) {
     // Memorize the initial stencil write mask, because
     // browsers may have different number of stencil bits
     model.__cache.STENCIL_WRITEMASK = gl.getParameter(gl.STENCIL_WRITEMASK);
-
-    xrDrawGL(model, null);
   }
 }
 
-var xrDrawGL = function (model, domNode) {
+var xrDrawGL = function (model) {
   var cache = model.__cache;
   var gl = cache.gl;
 
   if (!gl) {
-    return domNode;
+    return null;
   }
-
-  //gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
 
   if (!cache.depthTest.b) {
     gl.depthMask(true);
@@ -1019,8 +1020,7 @@ var xrDrawGL = function (model, domNode) {
   }
   _WebGLFix_disableScissor(cache);
   _WebGLFix_disableColorMask(cache);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-  gl.clearColor(1, 0, 1, 1.0);
+
 
   function drawEntity(entity) {
     if (!entity.__mesh.b.b) {
@@ -1151,5 +1151,5 @@ var xrDrawGL = function (model, domNode) {
   }
 
   _WebGLFix_listEach(drawEntity, model.__entities);
-  return domNode;
+  return null;
 }
