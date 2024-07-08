@@ -239,9 +239,9 @@ preserveDrawingBuffer =
     I.PreserveDrawingBuffer
 
 
-requestXrStart : Task XrStartError Int
-requestXrStart =
-    Elm.Kernel.WebGLFix.requestXrStart 123456
+requestXrStart : List Option -> Task XrStartError Int
+requestXrStart options =
+    Elm.Kernel.WebGLFix.requestXrStart options
 
 
 renderXrFrame : List Entity -> Task x Int

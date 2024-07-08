@@ -853,7 +853,7 @@ var xrGl = null;
 var xrReferenceSpace = null;
 var xrModel = null;
 
-function _WebGLFix_requestXrStart(dfg) {
+function _WebGLFix_requestXrStart(options) {
     return __Scheduler_binding(function (callback) {
         if (xrSession) {
             callback(__Scheduler_fail(__EI_AlreadyStarted));
@@ -885,7 +885,7 @@ function _WebGLFix_requestXrStart(dfg) {
                       var baseMatrix = refSpace._baseMatrix;
                       console.log(refSpace);
 
-                      xrModel = { __entities: [], __cache: {}, __options: [] };
+                      xrModel = { __entities: [], __cache: {}, __options: options };
 
                       xrRender(xrModel);
 

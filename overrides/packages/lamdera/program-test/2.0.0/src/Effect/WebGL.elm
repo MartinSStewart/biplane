@@ -363,9 +363,10 @@ type XrStartError
     | NotSupported
 
 
-requestXrStart : Effect.Task.Task FrontendOnly XrStartError Int
-requestXrStart =
+requestXrStart : List WebGLFix.Option -> Effect.Task.Task FrontendOnly XrStartError Int
+requestXrStart options =
     Effect.Internal.RequestXrStart
+        options
         (\result ->
             case result of
                 Ok ok ->

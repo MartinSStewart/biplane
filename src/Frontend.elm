@@ -68,16 +68,14 @@ update msg model =
             ( { model | time = time }, Command.none )
 
         PressedEnterVr ->
-            ( model, WebGL.requestXrStart |> Effect.Task.attempt StartedXr )
+            ( model, WebGL.requestXrStart [ WebGL.clearColor 0.5 0.5 0.5 1 ] |> Effect.Task.attempt StartedXr )
 
         StartedXr result ->
-            let
-                _ =
-                    Debug.log "StartedXr" result
-            in
             case result of
                 Ok _ ->
-                    ( { model | isInVr = True }, WebGL.renderXrFrame (entities model) |> Effect.Task.perform RenderedXrFrame )
+                    ( { model | isInVr = True }
+                    , WebGL.renderXrFrame (entities model) |> Effect.Task.perform RenderedXrFrame
+                    )
 
                 Err _ ->
                     ( model, Command.none )

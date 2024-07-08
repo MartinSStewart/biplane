@@ -519,8 +519,8 @@ toTask simulatedTask =
                 |> Task.onError (Err >> Task.succeed)
                 |> Task.andThen (\result -> toTask (function result))
 
-        Effect.Internal.RequestXrStart function ->
-            WebGLFix.requestXrStart
+        Effect.Internal.RequestXrStart options function ->
+            WebGLFix.requestXrStart options
                 |> Task.map Ok
                 |> Task.onError (Err >> Task.succeed)
                 |> Task.andThen (\result -> toTask (function result))

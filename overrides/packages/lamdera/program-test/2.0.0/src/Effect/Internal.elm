@@ -34,6 +34,7 @@ import Json.Decode
 import Json.Encode
 import Time
 import WebGL
+import WebGLFix.Internal
 import WebGLFix.Texture
 
 
@@ -124,7 +125,7 @@ type Task restriction x a
     | FileToBytes File (Bytes -> Task restriction x a)
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
-    | RequestXrStart (Result XrStartError Int -> Task restriction x a)
+    | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError Int -> Task restriction x a)
     | RenderXrFrame (List WebGL.Entity) (Int -> Task restriction x a)
 
 
@@ -297,8 +298,8 @@ andThen f task =
         LoadTexture loadTextureOptions string function ->
             LoadTexture loadTextureOptions string (function >> andThen f)
 
-        RequestXrStart function ->
-            RequestXrStart (function >> andThen f)
+        RequestXrStart options function ->
+            RequestXrStart options (function >> andThen f)
 
         RenderXrFrame entities function ->
             RenderXrFrame entities (function >> andThen f)
@@ -380,8 +381,8 @@ taskMapError f task =
         LoadTexture loadTextureOptions string function ->
             LoadTexture loadTextureOptions string (function >> taskMapError f)
 
-        RequestXrStart function ->
-            RequestXrStart (function >> taskMapError f)
+        RequestXrStart options function ->
+            RequestXrStart options (function >> taskMapError f)
 
         RenderXrFrame entities function ->
             RenderXrFrame entities (function >> taskMapError f)
