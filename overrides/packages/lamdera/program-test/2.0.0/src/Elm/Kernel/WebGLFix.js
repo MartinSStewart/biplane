@@ -477,7 +477,6 @@ var _WebGLFix_drawGL = F2(function (model, domNode) {
   _WebGLFix_disableScissor(cache);
   _WebGLFix_disableColorMask(cache);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-  gl.clearColor(1, 0, 1, 1.0);
 
   function drawEntity(entity) {
     if (!entity.__mesh.b.b) {
