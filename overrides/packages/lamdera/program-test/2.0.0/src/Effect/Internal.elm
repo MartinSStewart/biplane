@@ -18,6 +18,7 @@ module Effect.Internal exposing
     , Task(..)
     , Visibility(..)
     , Wrap(..)
+    , XrRenderError(..)
     , XrStartError(..)
     , andThen
     , taskMap
@@ -126,12 +127,16 @@ type Task restriction x a
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
     | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError Int -> Task restriction x a)
-    | RenderXrFrame (List WebGL.Entity) (Int -> Task restriction x a)
+    | RenderXrFrame (List WebGL.Entity) (Result XrRenderError Int -> Task restriction x a)
 
 
 type XrStartError
     = AlreadyStarted
     | NotSupported
+
+
+type XrRenderError
+    = XrSessionNotStarted
 
 
 type Bigger

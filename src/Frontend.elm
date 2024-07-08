@@ -74,14 +74,14 @@ update msg model =
             case result of
                 Ok _ ->
                     ( { model | isInVr = True }
-                    , WebGL.renderXrFrame (entities model) |> Effect.Task.perform RenderedXrFrame
+                    , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
                     )
 
                 Err _ ->
                     ( model, Command.none )
 
         RenderedXrFrame _ ->
-            ( model, WebGL.renderXrFrame (entities model) |> Effect.Task.perform RenderedXrFrame )
+            ( model, WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )

@@ -3,7 +3,7 @@
 import Elm.Kernel.VirtualDom exposing (custom, doc)
 import WebGLFix.Internal as WI exposing (enableSetting, enableOption)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
-import Effect.Internal as EI exposing (NotSupported, AlreadyStarted)
+import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted)
 
 */
 
@@ -908,13 +908,17 @@ function _WebGLFix_requestXrStart(options) {
 function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
         if (xrSession) {
+
+
             xrSession.requestAnimationFrame((time, frame) => {
                 let pose = frame.getViewerPose(xrReferenceSpace);
-
+                console.log(pose);
                 let err = xrGl.getError();
                 if (err) {
                     console.error(`WebGL error returned: ${err}`);
                 }
+
+                let poseData = { __$transform : new Float64Array(pose.transform.matrix) };
 
                 if (pose) {
                     let glLayer = frame.session.renderState.baseLayer;
@@ -934,7 +938,7 @@ function _WebGLFix_renderXrFrame(entities) {
             });
         }
         else {
-            callback(__Scheduler_succeed(0));
+            callback(__Scheduler_fail(__EI_XrSessionNotStarted));
         }
     });
 }
@@ -1005,10 +1009,6 @@ function xrRender(model) {
 var xrDrawGL = function (model) {
   var cache = model.__cache;
   var gl = cache.gl;
-
-  if (!gl) {
-    return null;
-  }
 
   if (!cache.depthTest.b) {
     gl.depthMask(true);
@@ -1151,5 +1151,4 @@ var xrDrawGL = function (model) {
   }
 
   _WebGLFix_listEach(drawEntity, model.__entities);
-  return null;
 }

@@ -2473,7 +2473,7 @@ runTask maybeClientId state task =
             function (Err Effect.Internal.NotSupported) |> runTask maybeClientId state
 
         RenderXrFrame _ function ->
-            function 0 |> runTask maybeClientId state
+            function (Ok 0) |> runTask maybeClientId state
 
 
 handleHttpResponseWithTestError :

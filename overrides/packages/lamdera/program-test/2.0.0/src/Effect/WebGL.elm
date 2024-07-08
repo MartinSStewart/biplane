@@ -7,7 +7,7 @@ module Effect.WebGL exposing
     , clearColor, preserveDrawingBuffer
     , indexedTriangles, lines, lineStrip, lineLoop, points, triangleFan
     , triangleStrip
-    , XrStartError(..), renderXrFrame, requestXrStart
+    , XrRenderError(..), XrStartError(..), renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -380,6 +380,19 @@ requestXrStart options =
         )
 
 
-renderXrFrame : List Entity -> Effect.Task.Task FrontendOnly x Int
+type XrRenderError
+    = XrSessionNotStarted
+
+
+renderXrFrame : List Entity -> Effect.Task.Task FrontendOnly XrRenderError Int
 renderXrFrame entities =
-    Effect.Internal.RenderXrFrame entities Effect.Internal.Succeed
+    Effect.Internal.RenderXrFrame
+        entities
+        (\result ->
+            case result of
+                Ok ok ->
+                    Effect.Internal.Succeed ok
+
+                Err Effect.Internal.XrSessionNotStarted ->
+                    Effect.Internal.Fail XrSessionNotStarted
+        )
