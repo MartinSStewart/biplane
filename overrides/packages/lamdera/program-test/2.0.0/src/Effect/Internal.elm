@@ -22,6 +22,7 @@ module Effect.Internal exposing
     , XrPose
     , XrRenderError(..)
     , XrStartError(..)
+    , XrView
     , andThen
     , taskMap
     , taskMapError
@@ -130,7 +131,7 @@ type Task restriction x a
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
     | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError Int -> Task restriction x a)
-    | RenderXrFrame (List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
+    | RenderXrFrame (XrView -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
 
 
 type alias XrPose =

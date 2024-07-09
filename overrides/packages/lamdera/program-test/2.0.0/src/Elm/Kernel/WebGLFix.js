@@ -920,17 +920,7 @@ function _WebGLFix_renderXrFrame(entities) {
                 }
 
                 let poseData = { __$transform : new Float64Array(pose.transform.matrix)
-                    , __$views : __List_fromArray(
-                        pose.views.map((view) => {
-                                return { __$eye :
-                                    view.eye === "left"
-                                        ? __EI_LeftEye
-                                        : view.eye === "right"
-                                            ? __EI_RightEye
-                                            : __EI_OtherEye
-                                    , __$transform : new Float64Array(view.transform.matrix)
-                                    };
-                            }))
+                    , __$views : __List_fromArray( pose.views.map((view) => jsViewToElm(view)))
                     };
 
                 if (pose) {
@@ -938,10 +928,12 @@ function _WebGLFix_renderXrFrame(entities) {
 
                     xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
                     xrGl.clear(xrGl.COLOR_BUFFER_BIT | xrGl.DEPTH_BUFFER_BIT | xrGl.STENCIL_BUFFER_BIT);
-                    xrModel.__entities = entities;
+
 
                     for (let view of pose.views) {
                         let viewport = glLayer.getViewport(view);
+
+                        xrModel.__entities = entities(jsViewToElm(view));
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
                         xrDrawGL(xrModel);
                     }
@@ -954,6 +946,17 @@ function _WebGLFix_renderXrFrame(entities) {
             callback(__Scheduler_fail(__EI_XrSessionNotStarted));
         }
     });
+}
+
+function jsViewToElm(view) {
+    return { __$eye :
+        view.eye === "left"
+            ? __EI_LeftEye
+            : view.eye === "right"
+                ? __EI_RightEye
+                : __EI_OtherEye
+        , __$transform : new Float64Array(view.transform.matrix)
+        };
 }
 
 /**

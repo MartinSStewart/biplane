@@ -7,7 +7,7 @@ module Effect.WebGL exposing
     , clearColor, preserveDrawingBuffer
     , indexedTriangles, lines, lineStrip, lineLoop, points, triangleFan
     , triangleStrip
-    , XrPose, XrRenderError(..), XrStartError(..), renderXrFrame, requestXrStart
+    , XrPose, XrRenderError(..), XrStartError(..), XrView, renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -401,10 +401,24 @@ type XrEyeType
     | OtherEye
 
 
-renderXrFrame : List Entity -> Effect.Task.Task FrontendOnly XrRenderError XrPose
+renderXrFrame : (XrView -> List Entity) -> Effect.Task.Task FrontendOnly XrRenderError XrPose
 renderXrFrame entities =
     Effect.Internal.RenderXrFrame
-        entities
+        (\view ->
+            entities
+                { eye =
+                    case view.eye of
+                        Effect.Internal.LeftEye ->
+                            LeftEye
+
+                        Effect.Internal.RightEye ->
+                            RightEye
+
+                        Effect.Internal.OtherEye ->
+                            OtherEye
+                , transform = view.transform
+                }
+        )
         (\result ->
             case result of
                 Ok ok ->

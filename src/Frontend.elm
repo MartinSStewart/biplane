@@ -8,7 +8,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera
 import Effect.Task
 import Effect.Time as Time
-import Effect.WebGL as WebGL exposing (Mesh, Shader)
+import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader)
 import Html
 import Html.Attributes
 import Html.Events
@@ -85,7 +85,7 @@ update msg model =
                 Ok pose ->
                     let
                         _ =
-                            Debug.log "pose" pose
+                            Debug.log "abc" ()
                     in
                     ( model, WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame )
 
@@ -114,13 +114,14 @@ view model =
     }
 
 
-entities model =
+entities : FrontendModel -> WebGL.XrView -> List Entity
+entities model eyeView =
     [ WebGL.entityWith
         []
         vertexShader
         fragmentShader
         mesh
-        {}
+        { modelTransform = Mat4.identity }
     ]
 
 
@@ -129,7 +130,7 @@ entities model =
 
 
 type alias Vertex =
-    { aVertexPosition : Vec3
+    { position : Vec3
     }
 
 
@@ -143,22 +144,28 @@ mesh =
         ]
 
 
+type alias Uniforms =
+    { modelTransform : Mat4 }
+
+
 
 -- Shaders
 
 
-vertexShader : Shader Vertex {} {}
+vertexShader : Shader Vertex Uniforms {}
 vertexShader =
     [glsl|
-  attribute vec3 aVertexPosition;
+  attribute vec3 position;
+
+  uniform mat4 modelTransform;
 
   void main(void) {
-    gl_Position = vec4(aVertexPosition, 1.0);
+    gl_Position = modelTransform * vec4(position, 1.0);
   }
     |]
 
 
-fragmentShader : Shader {} {} {}
+fragmentShader : Shader {} a {}
 fragmentShader =
     [glsl|
   void main(void) {
