@@ -392,7 +392,7 @@ type alias XrPose =
 
 
 type alias XrView =
-    { eye : XrEyeType }
+    { eye : XrEyeType, transform : Mat4 }
 
 
 type XrEyeType
@@ -423,6 +423,7 @@ renderXrFrame entities =
 
                                             Effect.Internal.OtherEye ->
                                                 OtherEye
+                                    , transform = view.transform
                                     }
                                 )
                                 ok.views

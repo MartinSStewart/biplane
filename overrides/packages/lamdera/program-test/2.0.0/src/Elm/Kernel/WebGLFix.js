@@ -928,6 +928,7 @@ function _WebGLFix_renderXrFrame(entities) {
                                         : view.eye === "right"
                                             ? __EI_RightEye
                                             : __EI_OtherEye
+                                    , __$transform : new Float64Array(view.transform.matrix)
                                     };
                             }))
                     };

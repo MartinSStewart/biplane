@@ -140,7 +140,7 @@ type alias XrPose =
 
 
 type alias XrView =
-    { eye : XrEyeType }
+    { eye : XrEyeType, transform : Mat4 }
 
 
 type XrEyeType
