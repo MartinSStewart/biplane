@@ -15,7 +15,7 @@ import Html.Events
 import Json.Encode
 import Lamdera
 import Math.Matrix4 as Mat4 exposing (Mat4)
-import Math.Vector3 exposing (Vec3, vec3)
+import Math.Vector3 as Vec3 exposing (Vec3, vec3)
 import Types exposing (..)
 import Url
 
@@ -121,7 +121,7 @@ entities model eyeView =
         vertexShader
         fragmentShader
         mesh
-        { modelTransform = Mat4.identity }
+        { modelTransform = Mat4.makeRotate (toFloat (Time.posixToMillis model.time) / 1000) (Vec3.vec3 0 1 0) }
     ]
 
 
