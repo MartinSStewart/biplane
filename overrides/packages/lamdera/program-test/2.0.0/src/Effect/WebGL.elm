@@ -7,7 +7,7 @@ module Effect.WebGL exposing
     , clearColor, preserveDrawingBuffer
     , indexedTriangles, lines, lineStrip, lineLoop, points, triangleFan
     , triangleStrip
-    , XrPose, XrRenderError(..), XrStartError(..), XrView, renderXrFrame, requestXrStart
+    , XrPose, XrRenderError(..), XrStartError(..), XrView, endXrSession, renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -464,3 +464,8 @@ renderXrFrame entities =
                         Effect.Internal.XrLostTracking ->
                             Effect.Internal.Fail XrLostTracking
         )
+
+
+endXrSession : Effect.Internal.Task FrontendOnly x ()
+endXrSession =
+    Effect.Internal.EndXrSession Effect.Internal.Succeed

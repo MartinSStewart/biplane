@@ -28,6 +28,8 @@ type FrontendMsg
     | PressedEnterVr
     | StartedXr (Result Effect.WebGL.XrStartError Int)
     | RenderedXrFrame (Result Effect.WebGL.XrRenderError Effect.WebGL.XrPose)
+    | KeyDown String
+    | EndedXrSession
 
 
 type ToBackend

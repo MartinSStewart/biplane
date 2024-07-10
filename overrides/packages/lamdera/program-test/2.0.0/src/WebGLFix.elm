@@ -4,7 +4,7 @@ module WebGLFix exposing
     , toHtml
     , entityWith, toHtmlWith, Option, alpha, depth, stencil, antialias
     , clearColor, preserveDrawingBuffer
-    , renderXrFrame, requestXrStart
+    , endXrSession, renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -248,3 +248,8 @@ requestXrStart options =
 renderXrFrame : ({ time : Float, xrView : Effect.Internal.XrView } -> List Entity) -> Task XrRenderError XrPose
 renderXrFrame entities =
     Elm.Kernel.WebGLFix.renderXrFrame entities
+
+
+endXrSession : Task x ()
+endXrSession =
+    Elm.Kernel.WebGLFix.xrEnd 0 |> Task.map (\_ -> ())

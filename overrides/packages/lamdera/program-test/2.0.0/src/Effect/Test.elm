@@ -2486,6 +2486,9 @@ runTask maybeClientId state task =
                 )
                 |> runTask maybeClientId state
 
+        EndXrSession function ->
+            function () |> runTask maybeClientId state
+
 
 handleHttpResponseWithTestError :
     Maybe ClientId

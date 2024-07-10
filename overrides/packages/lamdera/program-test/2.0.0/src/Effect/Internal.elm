@@ -132,6 +132,7 @@ type Task restriction x a
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
     | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError Int -> Task restriction x a)
     | RenderXrFrame ({ time : Float, xrView : XrView } -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
+    | EndXrSession (() -> Task restriction x a)
 
 
 type alias XrPose =
@@ -331,6 +332,9 @@ andThen f task =
         RenderXrFrame entities function ->
             RenderXrFrame entities (function >> andThen f)
 
+        EndXrSession function ->
+            EndXrSession (function >> andThen f)
+
 
 taskMapError : (x -> y) -> Task restriction x a -> Task restriction y a
 taskMapError f task =
@@ -413,3 +417,6 @@ taskMapError f task =
 
         RenderXrFrame entities function ->
             RenderXrFrame entities (function >> taskMapError f)
+
+        EndXrSession function ->
+            EndXrSession (function >> taskMapError f)

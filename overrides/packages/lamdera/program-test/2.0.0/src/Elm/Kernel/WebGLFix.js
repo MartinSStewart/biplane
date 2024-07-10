@@ -911,6 +911,17 @@ function _WebGLFix_requestXrStart(options) {
     });
 }
 
+function _WebGLFix_xrEnd(a) {
+    return __Scheduler_binding(function (callback) {
+        if (xrSession) {
+            xrSession.end().then((b) => callback(__Scheduler_succeed(0)));
+        }
+        else {
+            callback(__Scheduler_succeed(0));
+        }
+    });
+}
+
 function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
         console.log("renderXrFrame start");

@@ -6,12 +6,14 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera
+import Effect.Subscription as Subscription
 import Effect.Task
 import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Html
 import Html.Attributes
 import Html.Events
+import Json.Decode
 import Json.Encode
 import Lamdera
 import Math.Matrix4 as Mat4 exposing (Mat4)
@@ -28,7 +30,12 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = \m -> Effect.Browser.Events.onAnimationFrame AnimationFrame
+        , subscriptions =
+            \m ->
+                Subscription.batch
+                    [ Effect.Browser.Events.onAnimationFrame AnimationFrame
+                    , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
+                    ]
         , view = view
         }
 
@@ -98,6 +105,18 @@ update msg model =
                     ( model
                     , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
                     )
+
+        KeyDown key ->
+            ( model
+            , if Debug.log "key" key == "Escape" then
+                WebGL.endXrSession |> Effect.Task.perform (\() -> EndedXrSession)
+
+              else
+                Command.none
+            )
+
+        EndedXrSession ->
+            ( model, Command.none )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
