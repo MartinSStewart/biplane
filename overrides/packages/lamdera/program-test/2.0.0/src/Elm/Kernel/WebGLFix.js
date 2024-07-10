@@ -920,7 +920,8 @@ function _WebGLFix_renderXrFrame(entities) {
                 }
 
                 let poseData = { __$transform : new Float64Array(pose.transform.matrix)
-                    , __$views : __List_fromArray( pose.views.map((view) => jsViewToElm(view)))
+                    , __$views : __List_fromArray(pose.views.map((view) => jsViewToElm(view)))
+                    , __$time : time
                     };
 
                 if (pose) {
@@ -933,7 +934,7 @@ function _WebGLFix_renderXrFrame(entities) {
                     for (let view of pose.views) {
                         let viewport = glLayer.getViewport(view);
 
-                        xrModel.__entities = entities(jsViewToElm(view));
+                        xrModel.__entities = entities({ __$time : time, __$xrView : jsViewToElm(view) });
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
                         xrDrawGL(xrModel);
                     }
@@ -955,7 +956,9 @@ function jsViewToElm(view) {
             : view.eye === "right"
                 ? __EI_RightEye
                 : __EI_OtherEye
-        , __$transform : new Float64Array(view.transform.matrix)
+        , __$projectionMatrix : new Float64Array(view.projectionMatrix)
+        , __$viewMatrix : new Float64Array(view.transform.matrix)
+        , __$viewMatrixInverse : new Float64Array(view.transform.inverse.matrix)
         };
 }
 

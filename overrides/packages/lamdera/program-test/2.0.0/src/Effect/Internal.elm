@@ -131,17 +131,18 @@ type Task restriction x a
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
     | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError Int -> Task restriction x a)
-    | RenderXrFrame (XrView -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
+    | RenderXrFrame ({ time : Float, xrView : XrView } -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
 
 
 type alias XrPose =
     { transform : Mat4
     , views : List XrView
+    , time : Float
     }
 
 
 type alias XrView =
-    { eye : XrEyeType, transform : Mat4 }
+    { eye : XrEyeType, viewMatrix : Mat4, viewMatrixInverse : Mat4, projectionMatrix : Mat4 }
 
 
 type XrEyeType

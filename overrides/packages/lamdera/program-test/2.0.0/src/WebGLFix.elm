@@ -36,6 +36,7 @@ before trying to do too much with just the documentation provided here.
 -}
 
 import Effect.Internal exposing (XrPose, XrRenderError, XrStartError)
+import Effect.Time
 import Elm.Kernel.WebGLFix
 import Html exposing (Attribute, Html)
 import Task exposing (Task)
@@ -244,6 +245,6 @@ requestXrStart options =
     Elm.Kernel.WebGLFix.requestXrStart options
 
 
-renderXrFrame : (Effect.Internal.XrView -> List Entity) -> Task XrRenderError XrPose
+renderXrFrame : ({ time : Float, xrView : Effect.Internal.XrView } -> List Entity) -> Task XrRenderError XrPose
 renderXrFrame entities =
     Elm.Kernel.WebGLFix.renderXrFrame entities

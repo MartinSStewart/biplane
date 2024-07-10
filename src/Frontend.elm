@@ -83,11 +83,7 @@ update msg model =
         RenderedXrFrame result ->
             case result of
                 Ok pose ->
-                    let
-                        _ =
-                            Debug.log "abc" ()
-                    in
-                    ( model, WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame )
+                    ( { model | time = pose.time }, WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame )
 
                 Err _ ->
                     Debug.todo "RenderedXrFrame error"
@@ -114,14 +110,17 @@ view model =
     }
 
 
-entities : FrontendModel -> WebGL.XrView -> List Entity
-entities model eyeView =
+entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView } -> List Entity
+entities model { time, xrView } =
     [ WebGL.entityWith
         []
         vertexShader
         fragmentShader
         mesh
-        { modelTransform = Mat4.makeRotate (toFloat (Time.posixToMillis model.time) / 1000) (Vec3.vec3 0 1 0) }
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.viewMatrixInverse
+        , modelTransform = Mat4.identity --Mat4.makeRotate (toFloat (Time.posixToMillis time) / 1000) (Vec3.vec3 0 1 0)
+        }
     ]
 
 
@@ -137,15 +136,15 @@ type alias Vertex =
 mesh : Mesh Vertex
 mesh =
     WebGL.triangles
-        [ ( Vertex (vec3 -0.04 -0.04 0.1)
-          , Vertex (vec3 0.04 -0.04 0.1)
-          , Vertex (vec3 0.04 0.04 0.1)
+        [ ( Vertex (vec3 -0.4 -0.4 -2)
+          , Vertex (vec3 0.4 -0.4 -2)
+          , Vertex (vec3 0.4 0.4 -2)
           )
         ]
 
 
 type alias Uniforms =
-    { modelTransform : Mat4 }
+    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 }
 
 
 
@@ -158,9 +157,11 @@ vertexShader =
   attribute vec3 position;
 
   uniform mat4 modelTransform;
+  uniform mat4 viewMatrix;
+  uniform mat4 perspective;
 
   void main(void) {
-    gl_Position = modelTransform * vec4(position, 1.0);
+    gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
   }
     |]
 

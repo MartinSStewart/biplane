@@ -2474,7 +2474,17 @@ runTask maybeClientId state task =
             function (Err Effect.Internal.NotSupported) |> runTask maybeClientId state
 
         RenderXrFrame _ function ->
-            function (Ok { transform = Mat4.identity, views = [] }) |> runTask maybeClientId state
+            function
+                (Ok
+                    { transform = Mat4.identity
+                    , views = []
+                    , time =
+                        currentTime state
+                            |> Time.posixToMillis
+                            |> toFloat
+                    }
+                )
+                |> runTask maybeClientId state
 
 
 handleHttpResponseWithTestError :

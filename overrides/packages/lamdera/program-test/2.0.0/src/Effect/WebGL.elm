@@ -52,6 +52,7 @@ before trying to do too much with just the documentation provided here.
 import Effect.Command exposing (FrontendOnly)
 import Effect.Internal
 import Effect.Task
+import Effect.Time
 import Html exposing (Attribute, Html)
 import Math.Matrix4 exposing (Mat4)
 import WebGL
@@ -388,11 +389,12 @@ type XrRenderError
 type alias XrPose =
     { transform : Mat4
     , views : List XrView
+    , time : Effect.Time.Posix
     }
 
 
 type alias XrView =
-    { eye : XrEyeType, transform : Mat4 }
+    { eye : XrEyeType, viewMatrix : Mat4, viewMatrixInverse : Mat4, projectionMatrix : Mat4 }
 
 
 type XrEyeType
@@ -401,22 +403,29 @@ type XrEyeType
     | OtherEye
 
 
-renderXrFrame : (XrView -> List Entity) -> Effect.Task.Task FrontendOnly XrRenderError XrPose
+renderXrFrame :
+    ({ time : Effect.Time.Posix, xrView : XrView } -> List Entity)
+    -> Effect.Task.Task FrontendOnly XrRenderError XrPose
 renderXrFrame entities =
     Effect.Internal.RenderXrFrame
-        (\view ->
+        (\{ time, xrView } ->
             entities
-                { eye =
-                    case view.eye of
-                        Effect.Internal.LeftEye ->
-                            LeftEye
+                { time = round time |> Effect.Time.millisToPosix
+                , xrView =
+                    { eye =
+                        case xrView.eye of
+                            Effect.Internal.LeftEye ->
+                                LeftEye
 
-                        Effect.Internal.RightEye ->
-                            RightEye
+                            Effect.Internal.RightEye ->
+                                RightEye
 
-                        Effect.Internal.OtherEye ->
-                            OtherEye
-                , transform = view.transform
+                            Effect.Internal.OtherEye ->
+                                OtherEye
+                    , projectionMatrix = xrView.projectionMatrix
+                    , viewMatrix = xrView.viewMatrix
+                    , viewMatrixInverse = xrView.viewMatrixInverse
+                    }
                 }
         )
         (\result ->
@@ -437,10 +446,13 @@ renderXrFrame entities =
 
                                             Effect.Internal.OtherEye ->
                                                 OtherEye
-                                    , transform = view.transform
+                                    , projectionMatrix = view.projectionMatrix
+                                    , viewMatrix = view.viewMatrix
+                                    , viewMatrixInverse = view.viewMatrixInverse
                                     }
                                 )
                                 ok.views
+                        , time = round ok.time |> Effect.Time.millisToPosix
                         }
 
                 Err Effect.Internal.XrSessionNotStarted ->
