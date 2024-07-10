@@ -158,6 +158,7 @@ type XrStartError
 
 type XrRenderError
     = XrSessionNotStarted
+    | XrLostTracking
 
 
 type Bigger

@@ -3,7 +3,7 @@
 import Elm.Kernel.VirtualDom exposing (custom, doc)
 import WebGLFix.Internal as WI exposing (enableSetting, enableOption)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
-import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted, LeftEye, RightEye, OtherEye)
+import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted, XrLostTracking, LeftEye, RightEye, OtherEye)
 import Elm.Kernel.List exposing (fromArray)
 
 */
@@ -860,24 +860,29 @@ function _WebGLFix_requestXrStart(options) {
             callback(__Scheduler_fail(__EI_AlreadyStarted));
         }
         else {
-            console.log(navigator.xr);
             if (navigator.xr) {
                 navigator.xr.requestSession('immersive-vr').then((session) => {
                     xrSession = session;
                     // Listen for the sessions 'end' event so we can respond if the user
                     // or UA ends the session for any reason.
-                    //session.addEventListener('end', onSessionEnded);
+                    session.addEventListener('end', (a) => {
+                        console.log("VR ended");
+                        xrSession = null;
+                        xrGl = null;
+                        xrReferenceSpace = null;
+                        xrModel = null;
+                    });
 
                     // Create a WebGL context to render with, initialized to be compatible
                     // with the XRDisplay we're presenting to.
                     var xrCanvas = document.createElement('canvas');
                     xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
-                    console.log("3");
+
                     // Use the new WebGL context to create a XRWebGLLayer and set it as the
                     // sessions baseLayer. This allows any content rendered to the layer to
                     // be displayed on the XRDevice.
                     session.updateRenderState({ baseLayer: new XRWebGLLayer(session, xrGl) });
-                    console.log("5");
+
                     // Get a reference space, which is required for querying poses. In this
                     // case an 'local' reference space means that all poses will be relative
                     // to the location where the XRDevice was first detected.
@@ -908,9 +913,8 @@ function _WebGLFix_requestXrStart(options) {
 
 function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
+        console.log("renderXrFrame start");
         if (xrSession) {
-
-
             xrSession.requestAnimationFrame((time, frame) => {
                 let pose = frame.getViewerPose(xrReferenceSpace);
 
@@ -919,12 +923,14 @@ function _WebGLFix_renderXrFrame(entities) {
                     console.error(`WebGL error returned: ${err}`);
                 }
 
-                let poseData = { __$transform : new Float64Array(pose.transform.matrix)
-                    , __$views : __List_fromArray(pose.views.map((view) => jsViewToElm(view)))
-                    , __$time : time
-                    };
+
 
                 if (pose) {
+                    let poseData = { __$transform : new Float64Array(pose.transform.matrix)
+                        , __$views : __List_fromArray(pose.views.map(jsViewToElm))
+                        , __$time : time
+                        };
+
                     let glLayer = frame.session.renderState.baseLayer;
 
                     xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
@@ -938,12 +944,17 @@ function _WebGLFix_renderXrFrame(entities) {
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
                         xrDrawGL(xrModel);
                     }
+
+                    callback(__Scheduler_succeed(poseData));
+                }
+                else {
+                    callback(__Scheduler_fail(__EI_XrLostTracking));
                 }
 
-                callback(__Scheduler_succeed(poseData));
             });
         }
         else {
+            console.log("renderXrFrame_not_started");
             callback(__Scheduler_fail(__EI_XrSessionNotStarted));
         }
     });

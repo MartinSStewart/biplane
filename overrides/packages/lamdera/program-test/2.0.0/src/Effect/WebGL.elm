@@ -384,6 +384,7 @@ requestXrStart options =
 
 type XrRenderError
     = XrSessionNotStarted
+    | XrLostTracking
 
 
 type alias XrPose =
@@ -455,6 +456,11 @@ renderXrFrame entities =
                         , time = round ok.time |> Effect.Time.millisToPosix
                         }
 
-                Err Effect.Internal.XrSessionNotStarted ->
-                    Effect.Internal.Fail XrSessionNotStarted
+                Err error ->
+                    case error of
+                        Effect.Internal.XrSessionNotStarted ->
+                            Effect.Internal.Fail XrSessionNotStarted
+
+                        Effect.Internal.XrLostTracking ->
+                            Effect.Internal.Fail XrLostTracking
         )

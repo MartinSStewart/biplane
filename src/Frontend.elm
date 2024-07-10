@@ -8,7 +8,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera
 import Effect.Task
 import Effect.Time as Time
-import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader)
+import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Html
 import Html.Attributes
 import Html.Events
@@ -65,6 +65,10 @@ update msg model =
             ( model, Command.none )
 
         AnimationFrame time ->
+            let
+                _ =
+                    Debug.log "AnimationFrame" ()
+            in
             ( { model | time = time }, Command.none )
 
         PressedEnterVr ->
@@ -81,12 +85,19 @@ update msg model =
                     ( model, Command.none )
 
         RenderedXrFrame result ->
-            case result of
+            case Debug.log "RenderedXrFrame" result of
                 Ok pose ->
-                    ( { model | time = pose.time }, WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame )
+                    ( { model | time = pose.time }
+                    , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
+                    )
 
-                Err _ ->
-                    Debug.todo "RenderedXrFrame error"
+                Err XrSessionNotStarted ->
+                    ( { model | isInVr = False }, Command.none )
+
+                Err XrLostTracking ->
+                    ( model
+                    , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
+                    )
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
