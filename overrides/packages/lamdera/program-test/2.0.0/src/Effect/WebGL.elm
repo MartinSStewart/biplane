@@ -7,7 +7,7 @@ module Effect.WebGL exposing
     , clearColor, preserveDrawingBuffer
     , indexedTriangles, lines, lineStrip, lineLoop, points, triangleFan
     , triangleStrip
-    , XrPose, XrRenderError(..), XrStartError(..), XrView, endXrSession, renderXrFrame, requestXrStart
+    , XrPose, XrRenderError(..), XrStartData, XrStartError(..), XrView, endXrSession, renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -55,6 +55,7 @@ import Effect.Task
 import Effect.Time
 import Html exposing (Attribute, Html)
 import Math.Matrix4 exposing (Mat4)
+import Math.Vector3 exposing (Vec3)
 import WebGL
 import WebGL.Settings exposing (Setting)
 import WebGLFix
@@ -365,7 +366,11 @@ type XrStartError
     | NotSupported
 
 
-requestXrStart : List WebGLFix.Option -> Effect.Task.Task FrontendOnly XrStartError Int
+type alias XrStartData =
+    { boundary : Maybe (List Vec3) }
+
+
+requestXrStart : List WebGLFix.Option -> Effect.Task.Task FrontendOnly XrStartError XrStartData
 requestXrStart options =
     Effect.Internal.RequestXrStart
         options

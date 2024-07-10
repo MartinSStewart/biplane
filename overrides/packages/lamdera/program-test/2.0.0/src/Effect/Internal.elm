@@ -21,6 +21,7 @@ module Effect.Internal exposing
     , XrEyeType(..)
     , XrPose
     , XrRenderError(..)
+    , XrStartData
     , XrStartError(..)
     , XrView
     , andThen
@@ -37,6 +38,7 @@ import Http
 import Json.Decode
 import Json.Encode
 import Math.Matrix4 exposing (Mat4)
+import Math.Vector3 exposing (Vec3)
 import Time
 import WebGL
 import WebGLFix.Internal
@@ -130,7 +132,7 @@ type Task restriction x a
     | FileToBytes File (Bytes -> Task restriction x a)
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
-    | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError Int -> Task restriction x a)
+    | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError XrStartData -> Task restriction x a)
     | RenderXrFrame ({ time : Float, xrView : XrView } -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
     | EndXrSession (() -> Task restriction x a)
 
@@ -155,6 +157,10 @@ type XrEyeType
 type XrStartError
     = AlreadyStarted
     | NotSupported
+
+
+type alias XrStartData =
+    { boundary : Maybe (List Vec3) }
 
 
 type XrRenderError

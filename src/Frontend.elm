@@ -82,8 +82,8 @@ update msg model =
             ( model, WebGL.requestXrStart [ WebGL.clearColor 0.5 0.5 0.5 1 ] |> Effect.Task.attempt StartedXr )
 
         StartedXr result ->
-            case result of
-                Ok _ ->
+            case Debug.log "StartedXr" result of
+                Ok data ->
                     ( { model | isInVr = True }
                     , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
                     )
@@ -92,7 +92,7 @@ update msg model =
                     ( model, Command.none )
 
         RenderedXrFrame result ->
-            case Debug.log "RenderedXrFrame" result of
+            case result of
                 Ok pose ->
                     ( { model | time = pose.time }
                     , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
@@ -108,7 +108,7 @@ update msg model =
 
         KeyDown key ->
             ( model
-            , if Debug.log "key" key == "Escape" then
+            , if key == "Escape" then
                 WebGL.endXrSession |> Effect.Task.perform (\() -> EndedXrSession)
 
               else

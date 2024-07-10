@@ -26,7 +26,7 @@ type FrontendMsg
     | NoOpFrontendMsg
     | AnimationFrame Time.Posix
     | PressedEnterVr
-    | StartedXr (Result Effect.WebGL.XrStartError Int)
+    | StartedXr (Result Effect.WebGL.XrStartError Effect.WebGL.XrStartData)
     | RenderedXrFrame (Result Effect.WebGL.XrRenderError Effect.WebGL.XrPose)
     | KeyDown String
     | EndedXrSession

@@ -35,7 +35,7 @@ before trying to do too much with just the documentation provided here.
 
 -}
 
-import Effect.Internal exposing (XrPose, XrRenderError, XrStartError)
+import Effect.Internal exposing (XrPose, XrRenderError, XrStartData, XrStartError)
 import Effect.Time
 import Elm.Kernel.WebGLFix
 import Html exposing (Attribute, Html)
@@ -240,7 +240,7 @@ preserveDrawingBuffer =
     I.PreserveDrawingBuffer
 
 
-requestXrStart : List Option -> Task XrStartError Int
+requestXrStart : List Option -> Task XrStartError XrStartData
 requestXrStart options =
     Elm.Kernel.WebGLFix.requestXrStart options
 

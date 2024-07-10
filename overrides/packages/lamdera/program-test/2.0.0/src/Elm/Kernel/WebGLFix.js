@@ -5,6 +5,8 @@ import WebGLFix.Internal as WI exposing (enableSetting, enableOption)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
 import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted, XrLostTracking, LeftEye, RightEye, OtherEye)
 import Elm.Kernel.List exposing (fromArray)
+import Elm.Kernel.MJS exposing (v3)
+import Maybe exposing (Just, Nothing)
 
 */
 
@@ -861,12 +863,15 @@ function _WebGLFix_requestXrStart(options) {
         }
         else {
             if (navigator.xr) {
-                navigator.xr.requestSession('immersive-vr').then((session) => {
+                navigator.xr.requestSession(
+                    'immersive-vr', {
+                        requiredFeatures: ["local-floor"],
+                        optionalFeatures: ["bounded-floor"],
+                    }).then((session) => {
                     xrSession = session;
                     // Listen for the sessions 'end' event so we can respond if the user
                     // or UA ends the session for any reason.
                     session.addEventListener('end', (a) => {
-                        console.log("VR ended");
                         xrSession = null;
                         xrGl = null;
                         xrReferenceSpace = null;
@@ -883,24 +888,32 @@ function _WebGLFix_requestXrStart(options) {
                     // be displayed on the XRDevice.
                     session.updateRenderState({ baseLayer: new XRWebGLLayer(session, xrGl) });
 
-                    // Get a reference space, which is required for querying poses. In this
-                    // case an 'local' reference space means that all poses will be relative
-                    // to the location where the XRDevice was first detected.
-                    session.requestReferenceSpace('local').then((refSpace) => {
-                      xrReferenceSpace = refSpace;
-                      var baseMatrix = refSpace._baseMatrix;
-                      console.log(refSpace);
+                    function onBoundedFloor(boundedFloor) {
+                        session
+                            .requestReferenceSpace('local')
+                            .then((refSpace) => {
+                                xrReferenceSpace = refSpace;
+                                var baseMatrix = refSpace._baseMatrix;
 
-                      xrModel = { __entities: [], __cache: {}, __options: options };
+                                xrModel = { __entities: [], __cache: {}, __options: options };
 
-                      xrRender(xrModel);
+                                xrRender(xrModel);
 
-                      callback(__Scheduler_succeed(1));
-                      // Inform the session that we're ready to begin drawing.
-                      //session.requestAnimationFrame(onXRFrame);
+                                let xrStartData = { __$boundary : __Maybe_Nothing };
+                                console.log(boundedFloor);
+                                if (boundedFloor) {
+                                    xrStartData.__$boundary = __Maybe_Just(__List_fromArray(boundedFloor.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
+                                }
 
-                    });
+                                callback(__Scheduler_succeed(xrStartData));
 
+                            });
+                    }
+
+                    session
+                        .requestReferenceSpace('bounded-floor')
+                        .then(onBoundedFloor)
+                        .catch(() => onBoundedFloor(null));
 
                 });
             }
@@ -924,7 +937,7 @@ function _WebGLFix_xrEnd(a) {
 
 function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
-        console.log("renderXrFrame start");
+
         if (xrSession) {
 
             function notStarted(a) { callback(__Scheduler_fail(__EI_XrSessionNotStarted)); }
@@ -970,7 +983,6 @@ function _WebGLFix_renderXrFrame(entities) {
             });
         }
         else {
-            console.log("renderXrFrame_not_started");
             callback(__Scheduler_fail(__EI_XrSessionNotStarted));
         }
     });
