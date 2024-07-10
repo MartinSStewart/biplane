@@ -915,15 +915,20 @@ function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
         console.log("renderXrFrame start");
         if (xrSession) {
+
+            function notStarted(a) { callback(__Scheduler_fail(__EI_XrSessionNotStarted)); }
+
+            xrSession.addEventListener('end', notStarted);
+
             xrSession.requestAnimationFrame((time, frame) => {
                 let pose = frame.getViewerPose(xrReferenceSpace);
+
+                xrSession.removeEventListener('end', notStarted);
 
                 let err = xrGl.getError();
                 if (err) {
                     console.error(`WebGL error returned: ${err}`);
                 }
-
-
 
                 if (pose) {
                     let poseData = { __$transform : new Float64Array(pose.transform.matrix)
