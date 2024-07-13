@@ -2482,6 +2482,7 @@ runTask maybeClientId state task =
                         currentTime state
                             |> Time.posixToMillis
                             |> toFloat
+                    , boundary = Nothing
                     }
                 )
                 |> runTask maybeClientId state

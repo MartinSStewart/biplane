@@ -396,6 +396,7 @@ type alias XrPose =
     { transform : Mat4
     , views : List XrView
     , time : Effect.Time.Posix
+    , boundary : Maybe (List Vec3)
     }
 
 
@@ -459,6 +460,7 @@ renderXrFrame entities =
                                 )
                                 ok.views
                         , time = round ok.time |> Effect.Time.millisToPosix
+                        , boundary = ok.boundary
                         }
 
                 Err error ->

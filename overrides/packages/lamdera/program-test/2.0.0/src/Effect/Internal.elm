@@ -141,6 +141,7 @@ type alias XrPose =
     { transform : Mat4
     , views : List XrView
     , time : Float
+    , boundary : Maybe (List Vec3)
     }
 
 

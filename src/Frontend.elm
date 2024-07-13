@@ -45,6 +45,8 @@ init url key =
     ( { key = key
       , time = Time.millisToPosix 0
       , isInVr = False
+      , boundaryMesh = WebGL.triangleFan []
+      , previousBoundary = Nothing
       }
     , Command.none
     )
@@ -79,12 +81,18 @@ update msg model =
             ( { model | time = time }, Command.none )
 
         PressedEnterVr ->
-            ( model, WebGL.requestXrStart [ WebGL.clearColor 0.5 0.5 0.5 1 ] |> Effect.Task.attempt StartedXr )
+            ( model
+            , WebGL.requestXrStart [ WebGL.clearColor 0.5 0.5 0.5 1, WebGL.depth 1 ] |> Effect.Task.attempt StartedXr
+            )
 
         StartedXr result ->
             case Debug.log "StartedXr" result of
                 Ok data ->
-                    ( { model | isInVr = True }
+                    ( { model
+                        | isInVr = True
+                        , previousBoundary = data.boundary
+                        , boundaryMesh = getBoundaryMesh data.boundary
+                      }
                     , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
                     )
 
@@ -94,7 +102,16 @@ update msg model =
         RenderedXrFrame result ->
             case result of
                 Ok pose ->
-                    ( { model | time = pose.time }
+                    ( { model
+                        | time = pose.time
+                        , previousBoundary = pose.boundary
+                        , boundaryMesh =
+                            if model.previousBoundary == pose.boundary then
+                                model.boundaryMesh
+
+                            else
+                                getBoundaryMesh pose.boundary
+                      }
                     , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
                     )
 
@@ -117,6 +134,66 @@ update msg model =
 
         EndedXrSession ->
             ( model, Command.none )
+
+
+getBoundaryMesh : Maybe (List Vec3) -> Mesh Vertex
+getBoundaryMesh maybeBoundary =
+    Debug.log "boundaryMesh" <|
+        case maybeBoundary of
+            Just (first :: rest) ->
+                let
+                    heightOffset =
+                        Vec3.vec3 0 1 0
+
+                    length =
+                        List.length rest + 1 |> toFloat
+                in
+                List.foldl
+                    (\v state ->
+                        let
+                            t =
+                                state.index / length
+                        in
+                        { index = state.index + 1
+                        , first = v
+                        , quads =
+                            { position = state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                                :: { position = v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                                :: { position = Vec3.add heightOffset v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                                :: { position = Vec3.add heightOffset state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                                :: state.quads
+                        }
+                    )
+                    { index = 0, first = first, quads = [] }
+                    (rest ++ [ first ])
+                    |> .quads
+                    |> quadsToMesh
+
+            _ ->
+                WebGL.triangleFan []
+
+
+quadsToMesh : List a -> WebGL.Mesh a
+quadsToMesh vertices =
+    WebGL.indexedTriangles
+        vertices
+        (getQuadIndicesHelper vertices 0 [])
+
+
+getQuadIndicesHelper : List a -> Int -> List ( Int, Int, Int ) -> List ( Int, Int, Int )
+getQuadIndicesHelper list indexOffset newList =
+    case list of
+        _ :: _ :: _ :: _ :: rest ->
+            getQuadIndicesHelper
+                rest
+                (indexOffset + 1)
+                (( 4 * indexOffset + 3, 4 * indexOffset + 1, 4 * indexOffset )
+                    :: ( 4 * indexOffset + 2, 4 * indexOffset + 1, 4 * indexOffset + 3 )
+                    :: newList
+                )
+
+        _ ->
+            newList
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -142,11 +219,18 @@ view model =
 
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView } -> List Entity
 entities model { time, xrView } =
-    [ WebGL.entityWith
-        []
+    [ WebGL.entity
         vertexShader
         fragmentShader
         mesh
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.viewMatrixInverse
+        , modelTransform = Mat4.identity --Mat4.makeRotate (toFloat (Time.posixToMillis time) / 1000) (Vec3.vec3 0 1 0)
+        }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        model.boundaryMesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.viewMatrixInverse
         , modelTransform = Mat4.identity --Mat4.makeRotate (toFloat (Time.posixToMillis time) / 1000) (Vec3.vec3 0 1 0)
@@ -158,19 +242,18 @@ entities model { time, xrView } =
 -- Mesh
 
 
-type alias Vertex =
-    { position : Vec3
-    }
-
-
 mesh : Mesh Vertex
 mesh =
-    WebGL.triangles
-        [ ( Vertex (vec3 -0.4 -0.4 -2)
-          , Vertex (vec3 0.4 -0.4 -2)
-          , Vertex (vec3 0.4 0.4 -2)
-          )
-        ]
+    [ { position = vec3 1 0 -0.1, color = vec3 1 0 0 }
+    , { position = vec3 1 0 0.1, color = vec3 1 0 0 }
+    , { position = vec3 0 0 0.1, color = vec3 1 0 0 }
+    , { position = vec3 0 0 -0.1, color = vec3 1 0 0 }
+    , { position = vec3 -0.1 0 1, color = vec3 0 0 1 }
+    , { position = vec3 0.1 0 1, color = vec3 0 0 1 }
+    , { position = vec3 0.1 0 0, color = vec3 0 0 1 }
+    , { position = vec3 -0.1 0 0, color = vec3 0 0 1 }
+    ]
+        |> quadsToMesh
 
 
 type alias Uniforms =
@@ -181,25 +264,32 @@ type alias Uniforms =
 -- Shaders
 
 
-vertexShader : Shader Vertex Uniforms {}
+vertexShader : Shader Vertex Uniforms { vColor : Vec3 }
 vertexShader =
     [glsl|
-  attribute vec3 position;
+attribute vec3 position;
+attribute vec3 color;
 
-  uniform mat4 modelTransform;
-  uniform mat4 viewMatrix;
-  uniform mat4 perspective;
+uniform mat4 modelTransform;
+uniform mat4 viewMatrix;
+uniform mat4 perspective;
 
-  void main(void) {
+varying vec3 vColor;
+
+void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
-  }
+    vColor = color;
+}
     |]
 
 
-fragmentShader : Shader {} a {}
+fragmentShader : Shader {} a { vColor : Vec3 }
 fragmentShader =
     [glsl|
-  void main(void) {
-    gl_FragColor = vec4(1.0, 0.5, 0.0, 1.0);
-  }
+precision mediump float;
+varying vec3 vColor;
+
+void main(void) {
+    gl_FragColor = vec4(vColor, 1.0);
+}
     |]

@@ -888,32 +888,50 @@ function _WebGLFix_requestXrStart(options) {
                     // be displayed on the XRDevice.
                     session.updateRenderState({ baseLayer: new XRWebGLLayer(session, xrGl) });
 
-                    function onBoundedFloor(boundedFloor) {
-                        session
-                            .requestReferenceSpace('local')
-                            .then((refSpace) => {
-                                xrReferenceSpace = refSpace;
-                                var baseMatrix = refSpace._baseMatrix;
-
-                                xrModel = { __entities: [], __cache: {}, __options: options };
-
-                                xrRender(xrModel);
-
-                                let xrStartData = { __$boundary : __Maybe_Nothing };
-                                console.log(boundedFloor);
-                                if (boundedFloor) {
-                                    xrStartData.__$boundary = __Maybe_Just(__List_fromArray(boundedFloor.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
-                                }
-
-                                callback(__Scheduler_succeed(xrStartData));
-
-                            });
-                    }
 
                     session
                         .requestReferenceSpace('bounded-floor')
-                        .then(onBoundedFloor)
-                        .catch(() => onBoundedFloor(null));
+                        .then((boundedFloor) => {
+
+                            xrReferenceSpace = boundedFloor;
+
+                            xrModel = { __entities: [], __cache: {}, __options: options };
+
+                            xrRender(xrModel);
+
+                            let xrStartData = { __$boundary : __Maybe_Nothing };
+
+//                            if (xrReferenceSpace.boundsGeometry.length === 0) {
+//
+//                                xrReferenceSpace.addEventListener('reset', (event) => {
+//                                    console.log("Reset");
+//                                    console.log(event.target.boundsGeometry);
+//                                    console.log(event.target === xrReferenceSpace);
+//                                    xrReferenceSpace = event.target;
+//                                    xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
+//                                    callback(__Scheduler_succeed(xrStartData));
+//                                });
+//                            }
+//                            else {
+                                xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
+                                callback(__Scheduler_succeed(xrStartData));
+                            //}
+                        })
+                        .catch(() => {
+                            session
+                                .requestReferenceSpace('local-floor')
+                                .then((localFloor) => {
+
+                                    xrReferenceSpace = localFloor;
+
+                                    xrModel = { __entities: [], __cache: {}, __options: options };
+
+                                    xrRender(xrModel);
+
+                                    let xrStartData = { __$boundary : __Maybe_Nothing };
+                                    callback(__Scheduler_succeed(xrStartData));
+                                });
+                        });
 
                 });
             }
@@ -940,6 +958,7 @@ function _WebGLFix_renderXrFrame(entities) {
 
         if (xrSession) {
 
+            console.log(xrReferenceSpace);
             function notStarted(a) { callback(__Scheduler_fail(__EI_XrSessionNotStarted)); }
 
             xrSession.addEventListener('end', notStarted);
@@ -958,7 +977,12 @@ function _WebGLFix_renderXrFrame(entities) {
                     let poseData = { __$transform : new Float64Array(pose.transform.matrix)
                         , __$views : __List_fromArray(pose.views.map(jsViewToElm))
                         , __$time : time
+                        , __$boundary : __Maybe_Nothing
                         };
+
+                    if (xrReferenceSpace.boundsGeometry) {
+                         poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
+                    }
 
                     let glLayer = frame.session.renderState.baseLayer;
 
