@@ -2483,6 +2483,7 @@ runTask maybeClientId state task =
                             |> Time.posixToMillis
                             |> toFloat
                     , boundary = Nothing
+                    , inputs = []
                     }
                 )
                 |> runTask maybeClientId state

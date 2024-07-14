@@ -3,7 +3,7 @@
 import Elm.Kernel.VirtualDom exposing (custom, doc)
 import WebGLFix.Internal as WI exposing (enableSetting, enableOption)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
-import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted, XrLostTracking, LeftEye, RightEye, OtherEye)
+import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted, XrLostTracking, LeftEye, RightEye, OtherEye, LeftHand, RightHand, Unknown)
 import Elm.Kernel.List exposing (fromArray)
 import Elm.Kernel.MJS exposing (v3)
 import Maybe exposing (Just, Nothing)
@@ -901,14 +901,6 @@ function _WebGLFix_requestXrStart(options) {
 
                             let xrStartData = { __$boundary : __Maybe_Nothing };
 
-
-//                            xrReferenceSpace.addEventListener('reset', (event) => {
-//                                console.log("Reset");
-//                                console.log(event.target.boundsGeometry);
-//                                console.log(event.target === xrReferenceSpace);
-//                                xrReferenceSpace = event.target;
-//                            });
-
                             xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
                             callback(__Scheduler_succeed(xrStartData));
 
@@ -917,7 +909,6 @@ function _WebGLFix_requestXrStart(options) {
                             session
                                 .requestReferenceSpace('local-floor')
                                 .then((localFloor) => {
-
                                     xrReferenceSpace = localFloor;
 
                                     xrModel = { __entities: [], __cache: {}, __options: options };
@@ -938,6 +929,36 @@ function _WebGLFix_requestXrStart(options) {
     });
 }
 
+
+function getInputSources(session, frame, refSpace) {
+    let inputs = session.inputSources.map((inputSource) => {
+        let pose = frame.getPose(inputSource.targetRaySpace, refSpace);
+
+        let controller = { __$orientation : __Maybe_Nothing, __$handedness : __EI_Unknown };
+
+        switch (inputSource.handedness) {
+            case "left":
+                controller.__$handedness = __EI_LeftHand
+                break;
+            case "right":
+                controller.__$handedness = __EI_LeftHand
+                break;
+        }
+
+        if (pose) {
+            let transform = pose.transform;
+            controller.__$orientation = __Maybe_Just(
+                { __$position : A3(__MJS_v3, transform.position.x, transform.position.y, transform.position.z)
+                , __$direction : A3(__MJS_v3, transform.orientation.x, transform.orientation.y, transform.orientation.z)
+                });
+        }
+
+        return controller;
+    });
+
+    return __List_fromArray(inputs);
+}
+
 function _WebGLFix_xrEnd(a) {
     return __Scheduler_binding(function (callback) {
         if (xrSession) {
@@ -953,12 +974,13 @@ function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
 
         if (xrSession) {
-
+            console.log('render');
             function notStarted(a) { callback(__Scheduler_fail(__EI_XrSessionNotStarted)); }
 
             xrSession.addEventListener('end', notStarted);
 
             xrSession.requestAnimationFrame((time, frame) => {
+
                 let pose = frame.getViewerPose(xrReferenceSpace);
 
                 xrSession.removeEventListener('end', notStarted);
@@ -969,11 +991,16 @@ function _WebGLFix_renderXrFrame(entities) {
                 }
 
                 if (pose) {
+                    let inputs = getInputSources(xrSession, frame, xrReferenceSpace);
+
                     let poseData = { __$transform : new Float64Array(pose.transform.matrix)
                         , __$views : __List_fromArray(pose.views.map(jsViewToElm))
                         , __$time : time
                         , __$boundary : __Maybe_Nothing
+                        , __$inputs : inputs
                         };
+
+                    console.log(poseData);
 
                     if (xrReferenceSpace.boundsGeometry) {
                          poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
@@ -988,7 +1015,7 @@ function _WebGLFix_renderXrFrame(entities) {
                     for (let view of pose.views) {
                         let viewport = glLayer.getViewport(view);
 
-                        xrModel.__entities = entities({ __$time : time, __$xrView : jsViewToElm(view) });
+                        xrModel.__entities = entities({ __$time : time, __$xrView : jsViewToElm(view), __$inputs : inputs });
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
                         xrDrawGL(xrModel);
                     }

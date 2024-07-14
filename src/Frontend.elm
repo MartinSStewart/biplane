@@ -86,7 +86,7 @@ update msg model =
                 Ok data ->
                     ( { model
                         | isInVr = True
-                        , previousBoundary = data.boundary |> Debug.log "boundary"
+                        , previousBoundary = data.boundary
                         , boundaryMesh = getBoundaryMesh data.boundary
                       }
                     , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
@@ -100,7 +100,7 @@ update msg model =
                 Ok pose ->
                     ( { model
                         | time = pose.time
-                        , previousBoundary = pose.boundary |> Debug.log "boundary"
+                        , previousBoundary = pose.boundary
                         , boundaryMesh =
                             if model.previousBoundary == pose.boundary then
                                 model.boundaryMesh
@@ -212,7 +212,7 @@ view model =
     }
 
 
-entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView } -> List Entity
+entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model { time, xrView } =
     [ WebGL.entity
         vertexShader

@@ -19,6 +19,8 @@ module Effect.Internal exposing
     , Visibility(..)
     , Wrap(..)
     , XrEyeType(..)
+    , XrHandedness(..)
+    , XrInput
     , XrPose
     , XrRenderError(..)
     , XrStartData
@@ -133,7 +135,7 @@ type Task restriction x a
     | FileToUrl File (String -> Task restriction x a)
     | LoadTexture LoadTextureOptions String (Result WebGLFix.Texture.Error WebGLFix.Texture.Texture -> Task restriction x a)
     | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError XrStartData -> Task restriction x a)
-    | RenderXrFrame ({ time : Float, xrView : XrView } -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
+    | RenderXrFrame ({ time : Float, xrView : XrView, inputs : List XrInput } -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
     | EndXrSession (() -> Task restriction x a)
 
 
@@ -142,7 +144,18 @@ type alias XrPose =
     , views : List XrView
     , time : Float
     , boundary : Maybe (List Vec3)
+    , inputs : List XrInput
     }
+
+
+type alias XrInput =
+    { handedness : XrHandedness, orientation : Maybe { position : Vec3, direction : Vec3 } }
+
+
+type XrHandedness
+    = LeftHand
+    | RightHand
+    | Unknown
 
 
 type alias XrView =

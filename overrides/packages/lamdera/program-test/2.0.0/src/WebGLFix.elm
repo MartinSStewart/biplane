@@ -245,7 +245,9 @@ requestXrStart options =
     Elm.Kernel.WebGLFix.requestXrStart options
 
 
-renderXrFrame : ({ time : Float, xrView : Effect.Internal.XrView } -> List Entity) -> Task XrRenderError XrPose
+renderXrFrame :
+    ({ time : Float, xrView : Effect.Internal.XrView, inputs : List Effect.Internal.XrInput } -> List Entity)
+    -> Task XrRenderError XrPose
 renderXrFrame entities =
     Elm.Kernel.WebGLFix.renderXrFrame entities
 
