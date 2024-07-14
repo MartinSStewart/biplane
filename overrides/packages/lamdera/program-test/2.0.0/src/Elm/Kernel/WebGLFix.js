@@ -931,7 +931,8 @@ function _WebGLFix_requestXrStart(options) {
 
 
 function getInputSources(session, frame, refSpace) {
-    let inputs = session.inputSources.map((inputSource) => {
+    let inputs = []
+    session.inputSources.forEach((inputSource) => {
         let pose = frame.getPose(inputSource.targetRaySpace, refSpace);
 
         let controller = { __$orientation : __Maybe_Nothing, __$handedness : __EI_Unknown };
@@ -953,7 +954,7 @@ function getInputSources(session, frame, refSpace) {
                 });
         }
 
-        return controller;
+        inputs.push(controller);
     });
 
     return __List_fromArray(inputs);
@@ -974,7 +975,6 @@ function _WebGLFix_renderXrFrame(entities) {
     return __Scheduler_binding(function (callback) {
 
         if (xrSession) {
-            console.log('render');
             function notStarted(a) { callback(__Scheduler_fail(__EI_XrSessionNotStarted)); }
 
             xrSession.addEventListener('end', notStarted);
@@ -1000,7 +1000,6 @@ function _WebGLFix_renderXrFrame(entities) {
                         , __$inputs : inputs
                         };
 
-                    console.log(poseData);
 
                     if (xrReferenceSpace.boundsGeometry) {
                          poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));

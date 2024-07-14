@@ -213,7 +213,7 @@ view model =
 
 
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
-entities model { time, xrView } =
+entities model { time, xrView, inputs } =
     [ WebGL.entity
         vertexShader
         fragmentShader
@@ -231,6 +231,24 @@ entities model { time, xrView } =
         , modelTransform = Mat4.identity --Mat4.makeRotate (toFloat (Time.posixToMillis time) / 1000) (Vec3.vec3 0 1 0)
         }
     ]
+        ++ List.filterMap
+            (\input ->
+                case input.orientation of
+                    Just orientation ->
+                        WebGL.entity
+                            vertexShader
+                            fragmentShader
+                            handMesh
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.viewMatrixInverse
+                            , modelTransform = Mat4.makeTranslate orientation.position
+                            }
+                            |> Just
+
+                    Nothing ->
+                        Nothing
+            )
+            inputs
 
 
 
@@ -239,14 +257,42 @@ entities model { time, xrView } =
 
 mesh : Mesh Vertex
 mesh =
-    [ { position = vec3 1 0 -0.1, color = vec3 1 0 0 }
-    , { position = vec3 1 0 0.1, color = vec3 1 0 0 }
-    , { position = vec3 0 0 0.1, color = vec3 1 0 0 }
-    , { position = vec3 0 0 -0.1, color = vec3 1 0 0 }
-    , { position = vec3 -0.1 0 1, color = vec3 0 0 1 }
-    , { position = vec3 0.1 0 1, color = vec3 0 0 1 }
-    , { position = vec3 0.1 0 0, color = vec3 0 0 1 }
-    , { position = vec3 -0.1 0 0, color = vec3 0 0 1 }
+    let
+        thickness =
+            0.05
+    in
+    [ { position = vec3 1 0 -thickness, color = vec3 1 0 0 }
+    , { position = vec3 1 0 thickness, color = vec3 1 0 0 }
+    , { position = vec3 0 0 thickness, color = vec3 1 0 0 }
+    , { position = vec3 0 0 -thickness, color = vec3 1 0 0 }
+    , { position = vec3 -thickness 0 1, color = vec3 0 0 1 }
+    , { position = vec3 thickness 0 1, color = vec3 0 0 1 }
+    , { position = vec3 thickness 0 0, color = vec3 0 0 1 }
+    , { position = vec3 -thickness 0 0, color = vec3 0 0 1 }
+    ]
+        |> quadsToMesh
+
+
+handMesh =
+    let
+        thickness =
+            0.05
+
+        length =
+            0.2
+    in
+    [ { position = vec3 length 0 -thickness, color = vec3 1 0 0 }
+    , { position = vec3 length 0 thickness, color = vec3 1 0 0 }
+    , { position = vec3 0 0 thickness, color = vec3 1 0 0 }
+    , { position = vec3 0 0 -thickness, color = vec3 1 0 0 }
+    , { position = vec3 -thickness 0 length, color = vec3 0 0 1 }
+    , { position = vec3 thickness 0 length, color = vec3 0 0 1 }
+    , { position = vec3 thickness 0 0, color = vec3 0 0 1 }
+    , { position = vec3 -thickness 0 0, color = vec3 0 0 1 }
+    , { position = vec3 0 length -thickness, color = vec3 0 1 0 }
+    , { position = vec3 0 length thickness, color = vec3 0 1 0 }
+    , { position = vec3 0 0 thickness, color = vec3 0 1 0 }
+    , { position = vec3 0 0 -thickness, color = vec3 0 1 0 }
     ]
         |> quadsToMesh
 
