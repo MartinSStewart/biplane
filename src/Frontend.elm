@@ -74,10 +74,6 @@ update msg model =
             ( model, Command.none )
 
         AnimationFrame time ->
-            let
-                _ =
-                    Debug.log "AnimationFrame" ()
-            in
             ( { model | time = time }, Command.none )
 
         PressedEnterVr ->
@@ -86,11 +82,11 @@ update msg model =
             )
 
         StartedXr result ->
-            case Debug.log "StartedXr" result of
+            case result of
                 Ok data ->
                     ( { model
                         | isInVr = True
-                        , previousBoundary = data.boundary
+                        , previousBoundary = data.boundary |> Debug.log "boundary"
                         , boundaryMesh = getBoundaryMesh data.boundary
                       }
                     , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
@@ -104,7 +100,7 @@ update msg model =
                 Ok pose ->
                     ( { model
                         | time = pose.time
-                        , previousBoundary = pose.boundary
+                        , previousBoundary = pose.boundary |> Debug.log "boundary"
                         , boundaryMesh =
                             if model.previousBoundary == pose.boundary then
                                 model.boundaryMesh
@@ -138,39 +134,38 @@ update msg model =
 
 getBoundaryMesh : Maybe (List Vec3) -> Mesh Vertex
 getBoundaryMesh maybeBoundary =
-    Debug.log "boundaryMesh" <|
-        case maybeBoundary of
-            Just (first :: rest) ->
-                let
-                    heightOffset =
-                        Vec3.vec3 0 1 0
+    case maybeBoundary of
+        Just (first :: rest) ->
+            let
+                heightOffset =
+                    Vec3.vec3 0 1 0
 
-                    length =
-                        List.length rest + 1 |> toFloat
-                in
-                List.foldl
-                    (\v state ->
-                        let
-                            t =
-                                state.index / length
-                        in
-                        { index = state.index + 1
-                        , first = v
-                        , quads =
-                            { position = state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
-                                :: { position = v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
-                                :: { position = Vec3.add heightOffset v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
-                                :: { position = Vec3.add heightOffset state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
-                                :: state.quads
-                        }
-                    )
-                    { index = 0, first = first, quads = [] }
-                    (rest ++ [ first ])
-                    |> .quads
-                    |> quadsToMesh
+                length =
+                    List.length rest + 1 |> toFloat
+            in
+            List.foldl
+                (\v state ->
+                    let
+                        t =
+                            state.index / length
+                    in
+                    { index = state.index + 1
+                    , first = v
+                    , quads =
+                        { position = state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                            :: { position = v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                            :: { position = Vec3.add heightOffset v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                            :: { position = Vec3.add heightOffset state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                            :: state.quads
+                    }
+                )
+                { index = 0, first = first, quads = [] }
+                (rest ++ [ first ])
+                |> .quads
+                |> quadsToMesh
 
-            _ ->
-                WebGL.triangleFan []
+        _ ->
+            WebGL.triangleFan []
 
 
 quadsToMesh : List a -> WebGL.Mesh a

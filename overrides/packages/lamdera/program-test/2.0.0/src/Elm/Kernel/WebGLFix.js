@@ -901,21 +901,17 @@ function _WebGLFix_requestXrStart(options) {
 
                             let xrStartData = { __$boundary : __Maybe_Nothing };
 
-//                            if (xrReferenceSpace.boundsGeometry.length === 0) {
-//
-//                                xrReferenceSpace.addEventListener('reset', (event) => {
-//                                    console.log("Reset");
-//                                    console.log(event.target.boundsGeometry);
-//                                    console.log(event.target === xrReferenceSpace);
-//                                    xrReferenceSpace = event.target;
-//                                    xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
-//                                    callback(__Scheduler_succeed(xrStartData));
-//                                });
-//                            }
-//                            else {
-                                xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
-                                callback(__Scheduler_succeed(xrStartData));
-                            //}
+
+//                            xrReferenceSpace.addEventListener('reset', (event) => {
+//                                console.log("Reset");
+//                                console.log(event.target.boundsGeometry);
+//                                console.log(event.target === xrReferenceSpace);
+//                                xrReferenceSpace = event.target;
+//                            });
+
+                            xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
+                            callback(__Scheduler_succeed(xrStartData));
+
                         })
                         .catch(() => {
                             session
@@ -958,7 +954,6 @@ function _WebGLFix_renderXrFrame(entities) {
 
         if (xrSession) {
 
-            console.log(xrReferenceSpace);
             function notStarted(a) { callback(__Scheduler_fail(__EI_XrSessionNotStarted)); }
 
             xrSession.addEventListener('end', notStarted);
