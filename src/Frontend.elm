@@ -1,23 +1,26 @@
 module Frontend exposing (..)
 
+import Array
 import Browser exposing (UrlRequest(..))
-import Browser.Navigation as Nav
 import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Http
 import Effect.Lamdera
 import Effect.Subscription as Subscription
 import Effect.Task
 import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
+import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Html
-import Html.Attributes
 import Html.Events
 import Json.Decode
-import Json.Encode
 import Lamdera
+import Length
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector3 as Vec3 exposing (Vec3, vec3)
+import Obj.Decode
+import TriangularMesh
 import Types exposing (..)
 import Url
 
@@ -47,8 +50,12 @@ init url key =
       , isInVr = False
       , boundaryMesh = WebGL.triangleFan []
       , previousBoundary = Nothing
+      , biplaneMesh = WebGL.triangleFan []
       }
-    , Command.none
+    , Effect.Http.get
+        { url = "/biplane.obj"
+        , expect = Obj.Decode.expectObj GotBiplaneObj Length.meters Obj.Decode.triangles
+        }
     )
 
 
@@ -130,6 +137,29 @@ update msg model =
 
         EndedXrSession ->
             ( model, Command.none )
+
+        GotBiplaneObj result ->
+            case result of
+                Ok mesh2 ->
+                    ( { model
+                        | biplaneMesh =
+                            WebGL.indexedTriangles
+                                (TriangularMesh.vertices mesh2
+                                    |> Array.toList
+                                    |> List.map
+                                        (\point ->
+                                            { position = Point3d.toVec3 point
+                                            , color = Vec3.vec3 1 1 0
+                                            }
+                                        )
+                                )
+                                (TriangularMesh.faceIndices mesh2)
+                      }
+                    , Command.none
+                    )
+
+                Err error ->
+                    ( model, Command.none )
 
 
 getBoundaryMesh : Maybe (List Vec3) -> Mesh Vertex
@@ -233,19 +263,19 @@ entities model { time, xrView, inputs } =
     ]
         ++ List.filterMap
             (\input ->
-                case input.orientation of
-                    Just orientation ->
+                case ( input.orientation, input.handedness ) of
+                    ( Just orientation, WebGL.LeftHand ) ->
                         WebGL.entity
                             vertexShader
                             fragmentShader
-                            handMesh
+                            model.biplaneMesh
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrixInverse
-                            , modelTransform = orientation.matrix
+                            , modelTransform = Mat4.scale3 0.01 0.01 0.01 orientation.matrix
                             }
                             |> Just
 
-                    Nothing ->
+                    _ ->
                         Nothing
             )
             inputs

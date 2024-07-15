@@ -3,9 +3,14 @@ module Types exposing (..)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Effect.Browser.Navigation
+import Effect.Http
 import Effect.Time as Time
 import Effect.WebGL
+import Length exposing (Meters)
 import Math.Vector3 exposing (Vec3)
+import Obj.Decode
+import Point3d exposing (Point3d)
+import TriangularMesh exposing (TriangularMesh)
 import Url exposing (Url)
 
 
@@ -15,6 +20,7 @@ type alias FrontendModel =
     , isInVr : Bool
     , boundaryMesh : Effect.WebGL.Mesh Vertex
     , previousBoundary : Maybe (List Vec3)
+    , biplaneMesh : Effect.WebGL.Mesh Vertex
     }
 
 
@@ -39,6 +45,7 @@ type FrontendMsg
     | RenderedXrFrame (Result Effect.WebGL.XrRenderError Effect.WebGL.XrPose)
     | KeyDown String
     | EndedXrSession
+    | GotBiplaneObj (Result Effect.Http.Error (TriangularMesh (Point3d Meters Obj.Decode.ObjCoordinates)))
 
 
 type ToBackend

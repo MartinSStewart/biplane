@@ -935,8 +935,6 @@ function getInputSources(session, frame, refSpace) {
     session.inputSources.forEach((inputSource) => {
         let pose = frame.getPose(inputSource.targetRaySpace, refSpace);
 
-        console.log(inputSource.gamepad);
-
         let gamepad = inputSource.gamepad;
 
         let controller = {
