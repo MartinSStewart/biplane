@@ -241,7 +241,7 @@ entities model { time, xrView, inputs } =
                             handMesh
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrixInverse
-                            , modelTransform = Mat4.makeTranslate orientation.position
+                            , modelTransform = orientation.matrix
                             }
                             |> Just
 

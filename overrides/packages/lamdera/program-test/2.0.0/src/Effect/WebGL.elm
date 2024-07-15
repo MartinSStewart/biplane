@@ -402,7 +402,11 @@ type alias XrPose =
 
 
 type alias XrInput =
-    { handedness : XrHandedness, orientation : Maybe { position : Vec3, direction : Vec3 } }
+    { handedness : XrHandedness, orientation : Maybe XrOrientation }
+
+
+type alias XrOrientation =
+    { position : Vec3, direction : Vec3, matrix : Mat4, inverseMatrix : Mat4 }
 
 
 type XrHandedness

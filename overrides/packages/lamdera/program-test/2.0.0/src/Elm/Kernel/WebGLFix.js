@@ -951,6 +951,8 @@ function getInputSources(session, frame, refSpace) {
             controller.__$orientation = __Maybe_Just(
                 { __$position : A3(__MJS_v3, transform.position.x, transform.position.y, transform.position.z)
                 , __$direction : A3(__MJS_v3, transform.orientation.x, transform.orientation.y, transform.orientation.z)
+                , __$matrix : new Float64Array(transform.matrix)
+                , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
                 });
         }
 
