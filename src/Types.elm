@@ -8,10 +8,12 @@ import Effect.Time as Time
 import Effect.WebGL
 import Length exposing (Meters)
 import Math.Vector3 exposing (Vec3)
-import Obj.Decode
+import Obj.Decode exposing (ObjCoordinates)
 import Point3d exposing (Point3d)
+import Quantity exposing (Unitless)
 import TriangularMesh exposing (TriangularMesh)
 import Url exposing (Url)
+import Vector3d exposing (Vector3d)
 
 
 type alias FrontendModel =
@@ -21,12 +23,14 @@ type alias FrontendModel =
     , boundaryMesh : Effect.WebGL.Mesh Vertex
     , previousBoundary : Maybe (List Vec3)
     , biplaneMesh : Effect.WebGL.Mesh Vertex
+    , startTime : Time.Posix
     }
 
 
 type alias Vertex =
     { position : Vec3
     , color : Vec3
+    , normal : Vec3
     }
 
 
@@ -45,8 +49,9 @@ type FrontendMsg
     | RenderedXrFrame (Result Effect.WebGL.XrRenderError Effect.WebGL.XrPose)
     | KeyDown String
     | EndedXrSession
-    | GotBiplaneObj (Result Effect.Http.Error (TriangularMesh (Point3d Meters Obj.Decode.ObjCoordinates)))
+    | GotBiplaneObj (Result Effect.Http.Error (TriangularMesh { position : Point3d Meters ObjCoordinates, normal : Vector3d Unitless ObjCoordinates }))
     | TriggeredEndXrSession
+    | GotStartTime Time.Posix
 
 
 type ToBackend

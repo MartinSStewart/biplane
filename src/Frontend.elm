@@ -2,6 +2,7 @@ module Frontend exposing (..)
 
 import Array
 import Browser exposing (UrlRequest(..))
+import Duration
 import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -13,7 +14,9 @@ import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
+import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
 import Html
+import Html.Attributes
 import Html.Events
 import Json.Decode
 import Lamdera
@@ -51,15 +54,19 @@ init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command Fron
 init url key =
     ( { key = key
       , time = Time.millisToPosix 0
+      , startTime = Time.millisToPosix 0
       , isInVr = False
       , boundaryMesh = WebGL.triangleFan []
       , previousBoundary = Nothing
       , biplaneMesh = WebGL.triangleFan []
       }
-    , Effect.Http.get
-        { url = "/biplane.obj"
-        , expect = Obj.Decode.expectObj GotBiplaneObj Length.meters Obj.Decode.triangles
-        }
+    , Command.batch
+        [ Effect.Http.get
+            { url = "/biplane.obj"
+            , expect = Obj.Decode.expectObj GotBiplaneObj Length.meters Obj.Decode.faces
+            }
+        , Time.now |> Effect.Task.perform GotStartTime
+        ]
     )
 
 
@@ -170,8 +177,9 @@ update msg model =
                                     |> Array.toList
                                     |> List.map
                                         (\point ->
-                                            { position = Point3d.toVec3 point
+                                            { position = Point3d.toVec3 point.position
                                             , color = Vec3.vec3 1 1 0
+                                            , normal = Vector3d.toVec3 point.normal
                                             }
                                         )
                                 )
@@ -185,6 +193,9 @@ update msg model =
 
         TriggeredEndXrSession ->
             ( model, Command.none )
+
+        GotStartTime startTime ->
+            ( { model | startTime = startTime }, Command.none )
 
 
 getBoundaryMesh : Maybe (List Vec3) -> Mesh Vertex
@@ -207,10 +218,10 @@ getBoundaryMesh maybeBoundary =
                     { index = state.index + 1
                     , first = v
                     , quads =
-                        { position = state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
-                            :: { position = v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
-                            :: { position = Vec3.add heightOffset v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
-                            :: { position = Vec3.add heightOffset state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2) }
+                        { position = state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                            :: { position = v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                            :: { position = Vec3.add heightOffset v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                            :: { position = Vec3.add heightOffset state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
                             :: state.quads
                     }
                 )
@@ -255,14 +266,22 @@ updateFromBackend msg model =
 
 view : FrontendModel -> Browser.Document FrontendMsg
 view model =
+    let
+        elapsed =
+            Duration.from model.startTime model.time
+    in
     { title = "Biplane!"
     , body =
-        [ if model.isInVr then
-            Html.text "Currently in VR"
+        [ Html.div
+            [ Html.Attributes.style "font-size" "30px", Html.Attributes.style "font-family" "sans-serif" ]
+            [ if model.isInVr then
+                Html.text "Currently in VR "
 
-          else
-            Html.text "Not in VR"
-        , Html.button [ Html.Events.onClick PressedEnterVr ] [ Html.text "Enter VR" ]
+              else
+                Html.text "Not in VR "
+            , Html.button [ Html.Events.onClick PressedEnterVr, Html.Attributes.style "font-size" "30px" ] [ Html.text "Enter VR" ]
+            , " App started " ++ String.fromInt (round (Duration.inSeconds elapsed)) ++ " seconds ago" |> Html.text
+            ]
         ]
     }
 
@@ -272,7 +291,7 @@ entities model { time, xrView, inputs } =
     [ WebGL.entity
         vertexShader
         fragmentShader
-        mesh
+        floorAxes
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.viewMatrixInverse
         , modelTransform = Mat4.identity
@@ -304,16 +323,19 @@ entities model { time, xrView, inputs } =
                         Nothing
             )
             inputs
-        ++ [ WebGL.entityWith
-                [ blend, DepthTest.default ]
-                cloudVertexShader
-                cloudFragmentShader
-                clouds
-                { perspective = xrView.projectionMatrix
-                , viewMatrix = xrView.viewMatrixInverse
-                , modelTransform = Mat4.identity
-                }
-           ]
+
+
+
+--++ [ WebGL.entityWith
+--        [ blend, DepthTest.default ]
+--        cloudVertexShader
+--        cloudFragmentShader
+--        clouds
+--        { perspective = xrView.projectionMatrix
+--        , viewMatrix = xrView.viewMatrixInverse
+--        , modelTransform = Mat4.identity
+--        }
+--   ]
 
 
 blend : Setting
@@ -347,30 +369,30 @@ clouds =
                     t =
                         start + height * toFloat index / layers
                 in
-                [ { position = vec3 size t -size, color = vec3 1 1 1 }
-                , { position = vec3 size t size, color = vec3 1 1 1 }
-                , { position = vec3 -size t size, color = vec3 1 1 1 }
-                , { position = vec3 -size t -size, color = vec3 1 1 1 }
+                [ { position = vec3 size t -size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = vec3 size t size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = vec3 -size t size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = vec3 -size t -size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
                 ]
             )
         |> List.reverse
         |> quadsToMesh
 
 
-mesh : Mesh Vertex
-mesh =
+floorAxes : Mesh Vertex
+floorAxes =
     let
         thickness =
             0.05
     in
-    [ { position = vec3 1 0 -thickness, color = vec3 1 0 0 }
-    , { position = vec3 1 0 thickness, color = vec3 1 0 0 }
-    , { position = vec3 0 0 thickness, color = vec3 1 0 0 }
-    , { position = vec3 0 0 -thickness, color = vec3 1 0 0 }
-    , { position = vec3 -thickness 0 1, color = vec3 0 0 1 }
-    , { position = vec3 thickness 0 1, color = vec3 0 0 1 }
-    , { position = vec3 thickness 0 0, color = vec3 0 0 1 }
-    , { position = vec3 -thickness 0 0, color = vec3 0 0 1 }
+    [ { position = vec3 1 0 -thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 1 0 thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 0 0 thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 0 0 -thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 -thickness 0 1, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 thickness 0 1, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 thickness 0 0, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 -thickness 0 0, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
     ]
         |> quadsToMesh
 
@@ -407,33 +429,41 @@ type alias Uniforms =
 -- Shaders
 
 
-vertexShader : Shader Vertex Uniforms { vColor : Vec3 }
+vertexShader : Shader Vertex Uniforms { vColor : Vec3, vNormal : Vec3 }
 vertexShader =
     [glsl|
 attribute vec3 position;
 attribute vec3 color;
+attribute vec3 normal;
+
 
 uniform mat4 modelTransform;
 uniform mat4 viewMatrix;
 uniform mat4 perspective;
 
 varying vec3 vColor;
+varying vec3 vNormal;
 
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
     vColor = color;
+    vNormal = normal; //(modelTransform * vec4(normal, 0.0)).xyz;
 }
     |]
 
 
-fragmentShader : Shader {} a { vColor : Vec3 }
+fragmentShader : Shader {} a { vColor : Vec3, vNormal : Vec3 }
 fragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vColor;
+varying vec3 vNormal;
 
 void main(void) {
-    gl_FragColor = vec4(vColor, 1.0);
+
+    float highlightFactor =
+        max(0.0, vNormal.y);
+    gl_FragColor = vec4(vColor * highlightFactor, 1.0);
 }
     |]
 
