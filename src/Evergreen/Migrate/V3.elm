@@ -58,7 +58,7 @@ migrate_Types_FrontendModel : Evergreen.V1.Types.FrontendModel -> Evergreen.V3.T
 migrate_Types_FrontendModel old =
     { key = old.key
     , time = old.time
-    , isInVr = (Unimplemented {- Type `Bool` was added in V3. I need you to set a default value. -})
+    , isInVr = False
     }
 
 
@@ -79,14 +79,3 @@ migrate_Types_FrontendMsg old =
 
         Evergreen.V1.Types.PressedEnterVr ->
             Evergreen.V3.Types.PressedEnterVr
-
-        notices ->
-            {- @NOTICE `StartedXr Result` was added in V3.
-               This is just a reminder in case migrating some subset of the old data to this new value was important.
-               See https://lamdera.com/tips/modified-custom-type for more info.
-            -}
-            {- @NOTICE `RenderedXrFrame Result` was added in V3.
-               This is just a reminder in case migrating some subset of the old data to this new value was important.
-               See https://lamdera.com/tips/modified-custom-type for more info.
-            -}
-            (Unimplemented {- New constructors were added. I need you to resolve the above notices and then remove this case. -})
