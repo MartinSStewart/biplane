@@ -429,7 +429,7 @@ type alias Uniforms =
 -- Shaders
 
 
-vertexShader : Shader Vertex Uniforms { vColor : Vec3, vNormal : Vec3 }
+vertexShader : Shader Vertex Uniforms { vColor : Vec3, vNormal : Vec3, vPosition : Vec3 }
 vertexShader =
     [glsl|
 attribute vec3 position;
@@ -443,27 +443,77 @@ uniform mat4 perspective;
 
 varying vec3 vColor;
 varying vec3 vNormal;
+varying vec3 vPosition;
 
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
     vColor = color;
-    vNormal = normal; //(modelTransform * vec4(normal, 0.0)).xyz;
+    vPosition = (modelTransform * vec4(normal, 1.0)).xyz;
+    vNormal = (modelTransform * vec4(normal, 0.0)).xyz;
 }
     |]
 
 
-fragmentShader : Shader {} a { vColor : Vec3, vNormal : Vec3 }
+fragmentShader : Shader {} a { vColor : Vec3, vNormal : Vec3, vPosition : Vec3 }
 fragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vColor;
 varying vec3 vNormal;
+varying vec3 vPosition;
 
-void main(void) {
+// https://www.tomdalling.com/blog/modern-opengl/08-even-more-lighting-directional-lights-spotlights-multiple-lights/
+vec3 ApplyLight(
+    vec4 lightPosition,
+    vec3 lightIntensities,
+    float lightAmbientCoefficient,
+    float lightAttenuation,
+    vec3 surfaceColor,
+    vec3 normal,
+    vec3 surfacePos,
+    vec3 surfaceToCamera)
+{
+    float materialShininess = 100.0;
+    vec3 materialSpecularColor = vec3(0.7, 0.7, 0.7);
 
-    float highlightFactor =
-        max(0.0, vNormal.y);
-    gl_FragColor = vec4(vColor * highlightFactor, 1.0);
+    vec3 surfaceToLight;
+
+    //directional light
+    surfaceToLight = normalize(lightPosition.xyz);
+
+    //ambient
+    vec3 ambient = lightAmbientCoefficient * surfaceColor.rgb * lightIntensities;
+
+    //diffuse
+    float diffuseCoefficient = max(0.0, dot(normal, surfaceToLight));
+    vec3 diffuse = diffuseCoefficient * surfaceColor.rgb * lightIntensities;
+
+    //specular
+    float specularCoefficient = 0.0;
+    if (diffuseCoefficient > 0.0)
+    {
+        specularCoefficient = pow(max(0.0, dot(surfaceToCamera, reflect(-surfaceToLight, normal))), materialShininess);
+    }
+    vec3 specular = specularCoefficient * materialSpecularColor * lightIntensities;
+    //linear color (color before gamma correction)
+    return ambient + (diffuse + specular);
+}
+
+void main () {
+    vec3 color2 =
+        ApplyLight(
+            vec4(-0.2, 0.2, 1.0, 0.0),
+            vec3(0.94, 0.9, 0.7),
+            0.2,
+            0.0,
+            vColor.rgb,
+            vNormal,
+            vPosition,
+            normalize(vec3(0.0, 1.0, 0.0)));
+
+    float gamma = 2.2;
+
+    gl_FragColor = vec4(pow(color2, vec3(1.0/gamma)), 1.0);
 }
     |]
 
