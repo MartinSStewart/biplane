@@ -18,6 +18,7 @@ module Effect.Internal exposing
     , Task(..)
     , Visibility(..)
     , Wrap(..)
+    , XrButton
     , XrEyeType(..)
     , XrHandedness(..)
     , XrInput
@@ -150,7 +151,11 @@ type alias XrPose =
 
 
 type alias XrInput =
-    { handedness : XrHandedness, orientation : Maybe XrOrientation }
+    { handedness : XrHandedness, orientation : Maybe XrOrientation, buttons : List XrButton, mapping : String }
+
+
+type alias XrButton =
+    { isPressed : Bool, isTouched : Bool, value : Float }
 
 
 type alias XrOrientation =

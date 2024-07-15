@@ -7,7 +7,7 @@ module Effect.WebGL exposing
     , clearColor, preserveDrawingBuffer
     , indexedTriangles, lines, lineStrip, lineLoop, points, triangleFan
     , triangleStrip
-    , XrEyeType(..), XrHandedness(..), XrInput, XrPose, XrRenderError(..), XrStartData, XrStartError(..), XrView, endXrSession, renderXrFrame, requestXrStart
+    , XrButton, XrEyeType(..), XrHandedness(..), XrInput, XrPose, XrRenderError(..), XrStartData, XrStartError(..), XrView, endXrSession, renderXrFrame, requestXrStart
     )
 
 {-| The WebGL API is for high performance rendering. Definitely read about
@@ -402,7 +402,7 @@ type alias XrPose =
 
 
 type alias XrInput =
-    { handedness : XrHandedness, orientation : Maybe XrOrientation }
+    { handedness : XrHandedness, orientation : Maybe XrOrientation, buttons : List XrButton, mapping : String }
 
 
 type alias XrOrientation =
@@ -413,6 +413,10 @@ type XrHandedness
     = LeftHand
     | RightHand
     | Unknown
+
+
+type alias XrButton =
+    { isPressed : Bool, isTouched : Bool, value : Float }
 
 
 type alias XrView =
@@ -448,23 +452,7 @@ renderXrFrame entities =
                     , viewMatrix = xrView.viewMatrix
                     , viewMatrixInverse = xrView.viewMatrixInverse
                     }
-                , inputs =
-                    List.map
-                        (\input ->
-                            { handedness =
-                                case input.handedness of
-                                    Effect.Internal.LeftHand ->
-                                        LeftHand
-
-                                    Effect.Internal.RightHand ->
-                                        RightHand
-
-                                    Effect.Internal.Unknown ->
-                                        Unknown
-                            , orientation = input.orientation
-                            }
-                        )
-                        inputs
+                , inputs = List.map inputFromInternal inputs
                 }
         )
         (\result ->
@@ -493,23 +481,7 @@ renderXrFrame entities =
                                 ok.views
                         , time = round ok.time |> Effect.Time.millisToPosix
                         , boundary = ok.boundary
-                        , inputs =
-                            List.map
-                                (\input ->
-                                    { handedness =
-                                        case input.handedness of
-                                            Effect.Internal.LeftHand ->
-                                                LeftHand
-
-                                            Effect.Internal.RightHand ->
-                                                RightHand
-
-                                            Effect.Internal.Unknown ->
-                                                Unknown
-                                    , orientation = input.orientation
-                                    }
-                                )
-                                ok.inputs
+                        , inputs = List.map inputFromInternal ok.inputs
                         }
 
                 Err error ->
@@ -520,6 +492,24 @@ renderXrFrame entities =
                         Effect.Internal.XrLostTracking ->
                             Effect.Internal.Fail XrLostTracking
         )
+
+
+inputFromInternal : Effect.Internal.XrInput -> XrInput
+inputFromInternal input =
+    { handedness =
+        case input.handedness of
+            Effect.Internal.LeftHand ->
+                LeftHand
+
+            Effect.Internal.RightHand ->
+                RightHand
+
+            Effect.Internal.Unknown ->
+                Unknown
+    , orientation = input.orientation
+    , mapping = input.mapping
+    , buttons = input.buttons
+    }
 
 
 endXrSession : Effect.Internal.Task FrontendOnly x ()

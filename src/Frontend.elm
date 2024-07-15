@@ -220,7 +220,7 @@ entities model { time, xrView, inputs } =
         mesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.viewMatrixInverse
-        , modelTransform = Mat4.identity --Mat4.makeRotate (toFloat (Time.posixToMillis time) / 1000) (Vec3.vec3 0 1 0)
+        , modelTransform = Mat4.identity
         }
     , WebGL.entity
         vertexShader
@@ -228,7 +228,7 @@ entities model { time, xrView, inputs } =
         model.boundaryMesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.viewMatrixInverse
-        , modelTransform = Mat4.identity --Mat4.makeRotate (toFloat (Time.posixToMillis time) / 1000) (Vec3.vec3 0 1 0)
+        , modelTransform = Mat4.identity
         }
     ]
         ++ List.filterMap

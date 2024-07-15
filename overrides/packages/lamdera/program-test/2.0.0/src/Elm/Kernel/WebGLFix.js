@@ -935,7 +935,18 @@ function getInputSources(session, frame, refSpace) {
     session.inputSources.forEach((inputSource) => {
         let pose = frame.getPose(inputSource.targetRaySpace, refSpace);
 
-        let controller = { __$orientation : __Maybe_Nothing, __$handedness : __EI_Unknown };
+        console.log(inputSource.gamepad);
+
+        let gamepad = inputSource.gamepad;
+
+        let controller = {
+            __$buttons : __List_fromArray(gamepad.buttons.map((button) => {
+                    return { __$isPressed : button.pressed, __$isTouched : button.touched, __$value : button.value };
+                }))
+            , __$handedness : __EI_Unknown
+            , __$mapping : gamepad.mapping
+            , __$orientation : __Maybe_Nothing
+            };
 
         switch (inputSource.handedness) {
             case "left":
