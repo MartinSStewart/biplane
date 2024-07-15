@@ -16,7 +16,7 @@
             "elm-explorations/linear-algebra": "1.0.3",
             "lamdera/codecs": "1.0.0",
             "lamdera/core": "1.0.0",
-            "lamdera/program-test": "2.0.0"
+            "lamdera/program-test": "3.0.0"
         },
         "indirect": {
             "danfishgold/base64-bytes": "1.1.0",
