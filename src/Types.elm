@@ -46,6 +46,7 @@ type FrontendMsg
     | KeyDown String
     | EndedXrSession
     | GotBiplaneObj (Result Effect.Http.Error (TriangularMesh (Point3d Meters Obj.Decode.ObjCoordinates)))
+    | TriggeredEndXrSession
 
 
 type ToBackend

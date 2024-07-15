@@ -951,7 +951,7 @@ function getInputSources(session, frame, refSpace) {
                 controller.__$handedness = __EI_LeftHand
                 break;
             case "right":
-                controller.__$handedness = __EI_LeftHand
+                controller.__$handedness = __EI_RightHand
                 break;
         }
 

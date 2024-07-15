@@ -11,18 +11,22 @@ import Effect.Subscription as Subscription
 import Effect.Task
 import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
+import Effect.WebGL.Settings exposing (Setting)
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Html
 import Html.Events
 import Json.Decode
 import Lamdera
 import Length
+import List.Extra
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector3 as Vec3 exposing (Vec3, vec3)
 import Obj.Decode
 import TriangularMesh
 import Types exposing (..)
 import Url
+import WebGL.Settings.Blend as Blend
+import WebGL.Settings.DepthTest as DepthTest
 
 
 app =
@@ -115,7 +119,25 @@ update msg model =
                             else
                                 getBoundaryMesh pose.boundary
                       }
-                    , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
+                    , Command.batch
+                        [ WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
+                        , if
+                            List.any
+                                (\input ->
+                                    case List.Extra.getAt 0 input.buttons of
+                                        Just button ->
+                                            button.value > 0.5
+
+                                        Nothing ->
+                                            False
+                                )
+                                pose.inputs
+                          then
+                            WebGL.endXrSession |> Effect.Task.perform (\() -> TriggeredEndXrSession)
+
+                          else
+                            Command.none
+                        ]
                     )
 
                 Err XrSessionNotStarted ->
@@ -160,6 +182,9 @@ update msg model =
 
                 Err error ->
                     ( model, Command.none )
+
+        TriggeredEndXrSession ->
+            ( model, Command.none )
 
 
 getBoundaryMesh : Maybe (List Vec3) -> Mesh Vertex
@@ -264,7 +289,7 @@ entities model { time, xrView, inputs } =
         ++ List.filterMap
             (\input ->
                 case ( input.orientation, input.handedness ) of
-                    ( Just orientation, WebGL.LeftHand ) ->
+                    ( Just orientation, WebGL.RightHand ) ->
                         WebGL.entity
                             vertexShader
                             fragmentShader
@@ -279,10 +304,57 @@ entities model { time, xrView, inputs } =
                         Nothing
             )
             inputs
+        ++ [ WebGL.entityWith
+                [ blend, DepthTest.default ]
+                cloudVertexShader
+                cloudFragmentShader
+                clouds
+                { perspective = xrView.projectionMatrix
+                , viewMatrix = xrView.viewMatrixInverse
+                , modelTransform = Mat4.identity
+                }
+           ]
+
+
+blend : Setting
+blend =
+    Blend.add Blend.srcAlpha Blend.oneMinusSrcAlpha
 
 
 
 -- Mesh
+
+
+clouds : Mesh Vertex
+clouds =
+    let
+        start =
+            0.2
+
+        height =
+            0.4
+
+        layers =
+            30
+
+        size =
+            1
+    in
+    List.range 0 (layers - 1)
+        |> List.concatMap
+            (\index ->
+                let
+                    t =
+                        start + height * toFloat index / layers
+                in
+                [ { position = vec3 size t -size, color = vec3 1 1 1 }
+                , { position = vec3 size t size, color = vec3 1 1 1 }
+                , { position = vec3 -size t size, color = vec3 1 1 1 }
+                , { position = vec3 -size t -size, color = vec3 1 1 1 }
+                ]
+            )
+        |> List.reverse
+        |> quadsToMesh
 
 
 mesh : Mesh Vertex
@@ -362,5 +434,39 @@ varying vec3 vColor;
 
 void main(void) {
     gl_FragColor = vec4(vColor, 1.0);
+}
+    |]
+
+
+cloudVertexShader : Shader Vertex Uniforms { vColor : Vec3, vPosition : Vec3 }
+cloudVertexShader =
+    [glsl|
+attribute vec3 position;
+attribute vec3 color;
+
+uniform mat4 modelTransform;
+uniform mat4 viewMatrix;
+uniform mat4 perspective;
+
+varying vec3 vColor;
+varying vec3 vPosition;
+
+void main(void) {
+    gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
+    vColor = color;
+    vPosition = position;
+}
+    |]
+
+
+cloudFragmentShader : Shader {} a { vColor : Vec3, vPosition : Vec3 }
+cloudFragmentShader =
+    [glsl|
+precision mediump float;
+varying vec3 vColor;
+varying vec3 vPosition;
+
+void main(void) {
+    gl_FragColor = vec4(vColor, vPosition.x);
 }
     |]
