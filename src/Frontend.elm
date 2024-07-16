@@ -449,7 +449,7 @@ void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
     vColor = color;
     vPosition = (modelTransform * vec4(normal, 1.0)).xyz;
-    vNormal = (modelTransform * vec4(normal, 0.0)).xyz;
+    vNormal = normalize((modelTransform * vec4(normal, 0.0)).xyz);
 }
     |]
 
