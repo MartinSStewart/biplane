@@ -1,7 +1,9 @@
 module Frontend exposing (app)
 
+import Angle
 import Array
 import Browser exposing (UrlRequest(..))
+import Direction3d
 import Duration
 import Effect.Browser.Events
 import Effect.Browser.Navigation
@@ -13,6 +15,7 @@ import Effect.Task
 import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
+import Geometry.Interop.LinearAlgebra.Direction3d as Direction3d
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
 import Html
@@ -20,14 +23,17 @@ import Html.Attributes
 import Html.Events
 import Json.Decode
 import Lamdera
-import Length
+import Length exposing (Meters)
 import List.Extra
 import Math.Matrix4 as Mat4 exposing (Mat4)
-import Math.Vector3 as Vec3 exposing (Vec3, vec3)
+import Math.Vector3 as Vec3 exposing (Vec3)
 import Obj.Decode
+import Point3d
+import SketchPlane3d
 import TriangularMesh
 import Types exposing (..)
 import Url
+import Vector3d exposing (Vector3d)
 import WebGL.Settings.Blend as Blend
 import WebGL.Settings.DepthTest as DepthTest
 
@@ -296,10 +302,19 @@ entities model { time, xrView, inputs } =
         , viewMatrix = xrView.viewMatrixInverse
         , modelTransform = Mat4.identity
         }
+
+    --, WebGL.entity
+    --    vertexShader
+    --    fragmentShader
+    --    model.boundaryMesh
+    --    { perspective = xrView.projectionMatrix
+    --    , viewMatrix = xrView.viewMatrixInverse
+    --    , modelTransform = Mat4.identity
+    --    }
     , WebGL.entity
         vertexShader
         fragmentShader
-        model.boundaryMesh
+        waterMesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.viewMatrixInverse
         , modelTransform = Mat4.identity
@@ -307,7 +322,15 @@ entities model { time, xrView, inputs } =
     , WebGL.entity
         vertexShader
         fragmentShader
-        waterMesh
+        sunMesh
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.viewMatrixInverse
+        , modelTransform = Mat4.identity
+        }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        sphere
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.viewMatrixInverse
         , modelTransform = Mat4.identity
@@ -355,6 +378,27 @@ blend =
 -- Mesh
 
 
+sunPosition =
+    Vec3.vec3 0 500 0
+
+
+sunMesh : Mesh Vertex
+sunMesh =
+    let
+        size =
+            100
+
+        color =
+            Vec3.vec3 1 1 1
+    in
+    [ { position = Vec3.vec3 size 0 -size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 size 0 size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 -size 0 size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 -size 0 -size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
+    ]
+        |> quadsToMesh
+
+
 clouds : Mesh Vertex
 clouds =
     let
@@ -377,10 +421,10 @@ clouds =
                     t =
                         start + height * toFloat index / layers
                 in
-                [ { position = vec3 size t -size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = vec3 size t size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = vec3 -size t size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = vec3 -size t -size, color = vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                [ { position = Vec3.vec3 size t -size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = Vec3.vec3 size t size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = Vec3.vec3 -size t size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = Vec3.vec3 -size t -size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
                 ]
             )
         |> List.reverse
@@ -393,14 +437,14 @@ floorAxes =
         thickness =
             0.05
     in
-    [ { position = vec3 1 0 -thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 1 0 thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 0 0 thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 0 0 -thickness, color = vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 -thickness 0 1, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 thickness 0 1, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 thickness 0 0, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 -thickness 0 0, color = vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    [ { position = Vec3.vec3 1 0 -thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 1 0 thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 0 0 thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 0 0 -thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 -thickness 0 1, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 thickness 0 1, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
     ]
         |> quadsToMesh
 
@@ -409,41 +453,68 @@ waterMesh : Mesh Vertex
 waterMesh =
     let
         size =
-            1000
+            2
 
         color =
-            vec3 0.2 0.3 1
+            Vec3.vec3 0.2 0.3 1
     in
-    [ { position = vec3 size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 -size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = vec3 -size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
+    [ { position = Vec3.vec3 size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 -size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 -size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
     ]
         |> quadsToMesh
 
 
-handMesh =
+sphere : Mesh Vertex
+sphere =
     let
-        thickness =
-            0.05
+        radius =
+            0.3
 
-        length =
-            0.2
+        position =
+            Point3d.meters 0 1 0
+
+        uDetail =
+            32
+
+        vDetail =
+            16
+
+        mesh =
+            TriangularMesh.indexedBall
+                uDetail
+                vDetail
+                (\u v ->
+                    let
+                        longitude =
+                            2 * pi * toFloat u / uDetail
+
+                        latitude =
+                            pi * toFloat v / vDetail
+
+                        point : Vector3d Meters coordinate
+                        point =
+                            Vector3d.meters
+                                (sin longitude * sin latitude)
+                                (cos longitude * sin latitude)
+                                (cos latitude)
+
+                        --Direction3d.fromAzimuthInAndElevationFrom SketchPlane3d.xz longitude latitude
+                        --    |> Direction3d.toVector
+                        --    |> Vector3d.scaleBy radius
+                        --    |> Vector3d.unwrap
+                        --    |> Vector3d.unsafe
+                        --|> (\vec -> Point3d.translateBy vec position)
+                        --|> Point3d.toVec3
+                    in
+                    { position = Point3d.translateBy (Vector3d.scaleBy radius point) position |> Point3d.toVec3
+                    , normal = Vector3d.toVec3 point
+                    , color = Vec3.vec3 0.5 0.5 0.5
+                    }
+                )
     in
-    [ { position = vec3 length 0 -thickness, color = vec3 1 0 0 }
-    , { position = vec3 length 0 thickness, color = vec3 1 0 0 }
-    , { position = vec3 0 0 thickness, color = vec3 1 0 0 }
-    , { position = vec3 0 0 -thickness, color = vec3 1 0 0 }
-    , { position = vec3 -thickness 0 length, color = vec3 0 0 1 }
-    , { position = vec3 thickness 0 length, color = vec3 0 0 1 }
-    , { position = vec3 thickness 0 0, color = vec3 0 0 1 }
-    , { position = vec3 -thickness 0 0, color = vec3 0 0 1 }
-    , { position = vec3 0 length -thickness, color = vec3 0 1 0 }
-    , { position = vec3 0 length thickness, color = vec3 0 1 0 }
-    , { position = vec3 0 0 thickness, color = vec3 0 1 0 }
-    , { position = vec3 0 0 -thickness, color = vec3 0 1 0 }
-    ]
-        |> quadsToMesh
+    WebGL.indexedTriangles (TriangularMesh.vertices mesh |> Array.toList) (TriangularMesh.faceIndices mesh)
 
 
 type alias Uniforms =
@@ -496,10 +567,9 @@ varying vec3 vCameraPosition;
 
 // https://www.tomdalling.com/blog/modern-opengl/08-even-more-lighting-directional-lights-spotlights-multiple-lights/
 vec3 ApplyLight(
-    vec4 lightPosition,
+    vec3 lightPosition,
     vec3 lightIntensities,
     float lightAmbientCoefficient,
-    float lightAttenuation,
     vec3 surfaceColor,
     vec3 normal,
     vec3 surfacePos,
@@ -508,10 +578,7 @@ vec3 ApplyLight(
     float materialShininess = 100.0;
     vec3 materialSpecularColor = vec3(0.7, 0.7, 0.7);
 
-    vec3 surfaceToLight;
-
-    //directional light
-    surfaceToLight = normalize(lightPosition.xyz);
+    vec3 surfaceToLight = normalize(lightPosition);
 
     //ambient
     vec3 ambient = lightAmbientCoefficient * surfaceColor.rgb * lightIntensities;
@@ -534,9 +601,8 @@ vec3 ApplyLight(
 void main () {
     vec3 color2 =
         ApplyLight(
-            vec4(-0.2, 0.2, 1.0, 0.0),
-            vec3(0.94, 0.9, 0.7),
-            0.2,
+            vec3(0.0, 1.0, 0.0),
+            vec3(1.0, 1.0, 1.0),
             0.0,
             vColor.rgb,
             vNormal,
