@@ -1,4 +1,4 @@
-module Frontend exposing (..)
+module Frontend exposing (app)
 
 import Array
 import Browser exposing (UrlRequest(..))
@@ -304,6 +304,14 @@ entities model { time, xrView, inputs } =
         , viewMatrix = xrView.viewMatrixInverse
         , modelTransform = Mat4.identity
         }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        waterMesh
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.viewMatrixInverse
+        , modelTransform = Mat4.identity
+        }
     ]
         ++ List.filterMap
             (\input ->
@@ -397,6 +405,23 @@ floorAxes =
         |> quadsToMesh
 
 
+waterMesh : Mesh Vertex
+waterMesh =
+    let
+        size =
+            1000
+
+        color =
+            vec3 0.2 0.3 1
+    in
+    [ { position = vec3 size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 -size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
+    , { position = vec3 -size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
+    ]
+        |> quadsToMesh
+
+
 handMesh =
     let
         thickness =
@@ -429,7 +454,11 @@ type alias Uniforms =
 -- Shaders
 
 
-vertexShader : Shader Vertex Uniforms { vColor : Vec3, vNormal : Vec3, vPosition : Vec3 }
+type alias Varying =
+    { vColor : Vec3, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3 }
+
+
+vertexShader : Shader Vertex Uniforms Varying
 vertexShader =
     [glsl|
 attribute vec3 position;
@@ -444,23 +473,26 @@ uniform mat4 perspective;
 varying vec3 vColor;
 varying vec3 vNormal;
 varying vec3 vPosition;
+varying vec3 vCameraPosition;
 
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
     vColor = color;
     vPosition = (modelTransform * vec4(normal, 1.0)).xyz;
     vNormal = normalize((modelTransform * vec4(normal, 0.0)).xyz);
+    vCameraPosition = (viewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 }
     |]
 
 
-fragmentShader : Shader {} a { vColor : Vec3, vNormal : Vec3, vPosition : Vec3 }
+fragmentShader : Shader {} a Varying
 fragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vColor;
 varying vec3 vNormal;
 varying vec3 vPosition;
+varying vec3 vCameraPosition;
 
 // https://www.tomdalling.com/blog/modern-opengl/08-even-more-lighting-directional-lights-spotlights-multiple-lights/
 vec3 ApplyLight(
@@ -509,7 +541,7 @@ void main () {
             vColor.rgb,
             vNormal,
             vPosition,
-            normalize(vec3(0.0, 1.0, 0.0)));
+            normalize(vCameraPosition - vPosition));
 
     float gamma = 2.2;
 
