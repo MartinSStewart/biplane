@@ -299,8 +299,9 @@ entities model { time, xrView, inputs } =
         fragmentShader
         floorAxes
         { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.viewMatrixInverse
+        , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform = Mat4.identity
+        , cameraPosition = xrView.orientation.position
         }
 
     --, WebGL.entity
@@ -316,24 +317,36 @@ entities model { time, xrView, inputs } =
         fragmentShader
         waterMesh
         { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.viewMatrixInverse
+        , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform = Mat4.identity
+        , cameraPosition = xrView.orientation.position
         }
     , WebGL.entity
         vertexShader
         fragmentShader
         sunMesh
         { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.viewMatrixInverse
+        , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform = Mat4.identity
+        , cameraPosition = xrView.orientation.position
         }
     , WebGL.entity
         vertexShader
         fragmentShader
         sphere
         { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.viewMatrixInverse
+        , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform = Mat4.identity
+        , cameraPosition = Vec3.vec3 1.5 0 0 --xrView.orientation.position
+        }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        verticalLine
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.orientation.inverseMatrix
+        , modelTransform = Mat4.identity
+        , cameraPosition = xrView.orientation.position
         }
     ]
         ++ List.filterMap
@@ -345,8 +358,9 @@ entities model { time, xrView, inputs } =
                             fragmentShader
                             model.biplaneMesh
                             { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.viewMatrixInverse
+                            , viewMatrix = xrView.orientation.inverseMatrix
                             , modelTransform = Mat4.scale3 0.01 0.01 0.01 orientation.matrix
+                            , cameraPosition = xrView.orientation.position
                             }
                             |> Just
 
@@ -449,6 +463,19 @@ floorAxes =
         |> quadsToMesh
 
 
+verticalLine =
+    let
+        thickness =
+            0.02
+    in
+    [ { position = Vec3.vec3 0 0 -thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 0 0 thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 0 10 thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
+    , { position = Vec3.vec3 0 10 -thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
+    ]
+        |> quadsToMesh
+
+
 waterMesh : Mesh Vertex
 waterMesh =
     let
@@ -473,7 +500,7 @@ sphere =
             0.3
 
         position =
-            Point3d.meters 0 1 0
+            Point3d.meters 0 0 0
 
         uDetail =
             32
@@ -497,20 +524,12 @@ sphere =
                         point =
                             Vector3d.meters
                                 (sin longitude * sin latitude)
-                                (cos longitude * sin latitude)
                                 (cos latitude)
-
-                        --Direction3d.fromAzimuthInAndElevationFrom SketchPlane3d.xz longitude latitude
-                        --    |> Direction3d.toVector
-                        --    |> Vector3d.scaleBy radius
-                        --    |> Vector3d.unwrap
-                        --    |> Vector3d.unsafe
-                        --|> (\vec -> Point3d.translateBy vec position)
-                        --|> Point3d.toVec3
+                                (cos longitude * sin latitude)
                     in
                     { position = Point3d.translateBy (Vector3d.scaleBy radius point) position |> Point3d.toVec3
                     , normal = Vector3d.toVec3 point
-                    , color = Vec3.vec3 0.5 0.5 0.5
+                    , color = Vec3.vec3 0.7 0.3 0.5
                     }
                 )
     in
@@ -518,7 +537,7 @@ sphere =
 
 
 type alias Uniforms =
-    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 }
+    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, cameraPosition : Vec3 }
 
 
 
@@ -536,10 +555,10 @@ attribute vec3 position;
 attribute vec3 color;
 attribute vec3 normal;
 
-
 uniform mat4 modelTransform;
 uniform mat4 viewMatrix;
 uniform mat4 perspective;
+uniform vec3 cameraPosition;
 
 varying vec3 vColor;
 varying vec3 vNormal;
@@ -549,9 +568,9 @@ varying vec3 vCameraPosition;
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
     vColor = color;
-    vPosition = (modelTransform * vec4(normal, 1.0)).xyz;
+    vPosition = (modelTransform * vec4(position, 1.0)).xyz;
     vNormal = normalize((modelTransform * vec4(normal, 0.0)).xyz);
-    vCameraPosition = (viewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vCameraPosition = cameraPosition;
 }
     |]
 
@@ -575,7 +594,7 @@ vec3 ApplyLight(
     vec3 surfacePos,
     vec3 surfaceToCamera)
 {
-    float materialShininess = 100.0;
+    float materialShininess = 20.0;
     vec3 materialSpecularColor = vec3(0.7, 0.7, 0.7);
 
     vec3 surfaceToLight = normalize(lightPosition);
@@ -605,7 +624,7 @@ void main () {
             vec3(1.0, 1.0, 1.0),
             0.0,
             vColor.rgb,
-            vNormal,
+            normalize(vNormal),
             vPosition,
             normalize(vCameraPosition - vPosition));
 
@@ -644,79 +663,7 @@ precision mediump float;
 varying vec3 vColor;
 varying vec3 vPosition;
 
-/* discontinuous pseudorandom uniformly distributed in [-0.5, +0.5]^3 */
-vec3 random3(vec3 c) {
-//	float j = 4096.0*sin(dot(c,vec3(17.0, 59.4, 15.0)));
-//	vec3 r;
-//	r.z = fract(512.0*j);
-//	j *= .125;
-//	r.x = fract(512.0*j);
-//	j *= .125;
-//	r.y = fract(512.0*j);
-//	return r-0.5;
-    return c;
-}
-
-/* skew constants for 3d simplex functions */
-const float F3 =  0.3333333;
-const float G3 =  0.1666667;
-
-/* 3d simplex noise */
-float simplex3d(vec3 p) {
-	 /* 1. find current tetrahedron T and it's four vertices */
-	 /* s, s+i1, s+i2, s+1.0 - absolute skewed (integer) coordinates of T vertices */
-	 /* x, x1, x2, x3 - unskewed coordinates of p relative to each of T vertices*/
-
-	 /* calculate s and x */
-	 vec3 s = floor(p + dot(p, vec3(F3)));
-	 vec3 x = p - s + dot(s, vec3(G3));
-
-	 /* calculate i1 and i2 */
-	 vec3 e = step(vec3(0.0), x - x.yzx);
-	 vec3 i1 = e*(1.0 - e.zxy);
-	 vec3 i2 = 1.0 - e.zxy*(1.0 - e);
-
-	 /* x1, x2, x3 */
-	 vec3 x1 = x - i1 + G3;
-	 vec3 x2 = x - i2 + 2.0*G3;
-	 vec3 x3 = x - 1.0 + 3.0*G3;
-
-	 /* 2. find four surflets and store them in d */
-	 vec4 w, d;
-
-	 /* calculate surflet weights */
-	 w.x = dot(x, x);
-	 w.y = dot(x1, x1);
-	 w.z = dot(x2, x2);
-	 w.w = dot(x3, x3);
-
-	 /* w fades from 0.6 at the center of the surflet to 0.0 at the margin */
-	 w = max(0.6 - w, 0.0);
-
-	 /* calculate surflet components */
-	 d.x = dot(random3(s), x);
-	 d.y = dot(random3(s + i1), x1);
-	 d.z = dot(random3(s + i2), x2);
-	 d.w = dot(random3(s + 1.0), x3);
-
-	 /* multiply d by w^4 */
-	 w *= w;
-	 w *= w;
-	 d *= w;
-
-	 /* 3. return the sum of the four surflets */
-	 return dot(d, vec4(52.0));
-}
-
-/* directional artifacts can be reduced by rotating each octave */
-float simplex3d_fractal(vec3 m) {
-    return 0.5*simplex3d(m);
-			//+0.1*simplex3d(2.0*m);
-//			+0.1333333*simplex3d(4.0*m*rot3)
-//			+0.0666667*simplex3d(8.0*m);
-}
-
 void main(void) {
-    gl_FragColor = vec4(vColor, min(0.5, simplex3d_fractal(vPosition)));
+    gl_FragColor = vec4(vColor, 0.1);
 }
     |]

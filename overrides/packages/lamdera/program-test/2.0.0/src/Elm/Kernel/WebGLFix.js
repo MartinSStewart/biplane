@@ -1045,6 +1045,8 @@ function _WebGLFix_renderXrFrame(entities) {
 }
 
 function jsViewToElm(view) {
+    let transform = view.transform;
+
     return { __$eye :
         view.eye === "left"
             ? __EI_LeftEye
@@ -1052,8 +1054,12 @@ function jsViewToElm(view) {
                 ? __EI_RightEye
                 : __EI_OtherEye
         , __$projectionMatrix : new Float64Array(view.projectionMatrix)
-        , __$viewMatrix : new Float64Array(view.transform.matrix)
-        , __$viewMatrixInverse : new Float64Array(view.transform.inverse.matrix)
+        , __$orientation :
+            { __$position : A3(__MJS_v3, transform.position.x, transform.position.y, transform.position.z)
+            , __$direction : A3(__MJS_v3, transform.orientation.x, transform.orientation.y, transform.orientation.z)
+            , __$matrix : new Float64Array(transform.matrix)
+            , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
+            }
         };
 }
 

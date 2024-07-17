@@ -420,7 +420,7 @@ type alias XrButton =
 
 
 type alias XrView =
-    { eye : XrEyeType, viewMatrix : Mat4, viewMatrixInverse : Mat4, projectionMatrix : Mat4 }
+    { eye : XrEyeType, orientation : XrOrientation, projectionMatrix : Mat4 }
 
 
 type XrEyeType
@@ -435,9 +435,9 @@ renderXrFrame :
 renderXrFrame entities =
     Effect.Internal.RenderXrFrame
         (\{ time, xrView, inputs } ->
-            entities
-                { time = round time |> Effect.Time.millisToPosix
-                , xrView =
+            let
+                xrView2 : XrView
+                xrView2 =
                     { eye =
                         case xrView.eye of
                             Effect.Internal.LeftEye ->
@@ -449,9 +449,12 @@ renderXrFrame entities =
                             Effect.Internal.OtherEye ->
                                 OtherEye
                     , projectionMatrix = xrView.projectionMatrix
-                    , viewMatrix = xrView.viewMatrix
-                    , viewMatrixInverse = xrView.viewMatrixInverse
+                    , orientation = xrView.orientation
                     }
+            in
+            entities
+                { time = round time |> Effect.Time.millisToPosix
+                , xrView = xrView2
                 , inputs = List.map inputFromInternal inputs
                 }
         )
@@ -474,8 +477,7 @@ renderXrFrame entities =
                                             Effect.Internal.OtherEye ->
                                                 OtherEye
                                     , projectionMatrix = view.projectionMatrix
-                                    , viewMatrix = view.viewMatrix
-                                    , viewMatrixInverse = view.viewMatrixInverse
+                                    , orientation = view.orientation
                                     }
                                 )
                                 ok.views

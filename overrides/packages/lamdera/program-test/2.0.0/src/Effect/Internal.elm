@@ -169,7 +169,7 @@ type XrHandedness
 
 
 type alias XrView =
-    { eye : XrEyeType, viewMatrix : Mat4, viewMatrixInverse : Mat4, projectionMatrix : Mat4 }
+    { eye : XrEyeType, projectionMatrix : Mat4, orientation : XrOrientation }
 
 
 type XrEyeType
