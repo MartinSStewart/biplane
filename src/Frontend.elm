@@ -10,7 +10,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Http
 import Effect.Lamdera
 import Effect.Subscription as Subscription
-import Effect.Task
+import Effect.Task as Task
 import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
@@ -65,13 +65,24 @@ init url key =
       , boundaryMesh = WebGL.triangleFan []
       , previousBoundary = Nothing
       , biplaneMesh = WebGL.triangleFan []
+      , cloudTexture = LoadingTexture
       }
     , Command.batch
         [ Effect.Http.get
             { url = "/biplane.obj"
             , expect = Obj.Decode.expectObj GotBiplaneObj Length.meters Obj.Decode.faces
             }
-        , Time.now |> Effect.Task.perform GotStartTime
+        , Time.now |> Task.perform GotStartTime
+        , Effect.WebGL.Texture.loadWith
+            { magnify = Effect.WebGL.Texture.linear
+            , minify = Effect.WebGL.Texture.linear
+            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+            , flipY = False
+            , premultiplyAlpha = False
+            }
+            "/cloud-texture.jpg"
+            |> Task.attempt GotCloudTexture
         ]
     )
 
@@ -80,33 +91,34 @@ cloudTextureSize =
     512
 
 
-cloudTexture : Effect.WebGL.Texture.Texture
-cloudTexture =
-    List.range 0 (cloudTextureSize * cloudTextureSize - 1)
-        |> List.map
-            (\index ->
-                let
-                    x =
-                        modBy cloudTextureSize index
 
-                    y =
-                        index // cloudTextureSize
-                in
-                Bytes.Encode.unsignedInt8 (modBy 256 (x + y))
-            )
-        |> Bytes.Encode.sequence
-        |> Bytes.Encode.encode
-        |> Effect.WebGL.Texture.loadBytesWith
-            { magnify = Effect.WebGL.Texture.linear
-            , minify = Effect.WebGL.Texture.linear
-            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-            , verticalWrap = Effect.WebGL.Texture.clampToEdge
-            , flipY = False
-            , premultiplyAlpha = False
-            }
-            ( cloudTextureSize, cloudTextureSize )
-            Effect.WebGL.Texture.luminance
-        |> Unsafe.assumeOk
+--cloudTexture : Effect.WebGL.Texture.Texture
+--cloudTexture =
+--    List.range 0 (cloudTextureSize * cloudTextureSize - 1)
+--        |> List.map
+--            (\index ->
+--                let
+--                    x =
+--                        modBy cloudTextureSize index
+--
+--                    y =
+--                        index // cloudTextureSize
+--                in
+--                Bytes.Encode.unsignedInt8 (modBy 256 (x + y))
+--            )
+--        |> Bytes.Encode.sequence
+--        |> Bytes.Encode.encode
+--        |> Effect.WebGL.Texture.loadBytesWith
+--            { magnify = Effect.WebGL.Texture.linear
+--            , minify = Effect.WebGL.Texture.linear
+--            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+--            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+--            , flipY = False
+--            , premultiplyAlpha = False
+--            }
+--            ( cloudTextureSize, cloudTextureSize )
+--            Effect.WebGL.Texture.luminance
+--        |> Unsafe.assumeOk
 
 
 update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -135,7 +147,7 @@ update msg model =
 
         PressedEnterVr ->
             ( model
-            , WebGL.requestXrStart [ WebGL.clearColor 0.5 0.5 0.5 1, WebGL.depth 1 ] |> Effect.Task.attempt StartedXr
+            , WebGL.requestXrStart [ WebGL.clearColor 0.5 0.5 0.5 1, WebGL.depth 1 ] |> Task.attempt StartedXr
             )
 
         StartedXr result ->
@@ -146,7 +158,7 @@ update msg model =
                         , previousBoundary = data.boundary
                         , boundaryMesh = getBoundaryMesh data.boundary
                       }
-                    , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
+                    , WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
                     )
 
                 Err _ ->
@@ -166,7 +178,7 @@ update msg model =
                                 getBoundaryMesh pose.boundary
                       }
                     , Command.batch
-                        [ WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
+                        [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
                         , if
                             List.any
                                 (\input ->
@@ -179,7 +191,7 @@ update msg model =
                                 )
                                 pose.inputs
                           then
-                            WebGL.endXrSession |> Effect.Task.perform (\() -> TriggeredEndXrSession)
+                            WebGL.endXrSession |> Task.perform (\() -> TriggeredEndXrSession)
 
                           else
                             Command.none
@@ -191,13 +203,13 @@ update msg model =
 
                 Err XrLostTracking ->
                     ( model
-                    , WebGL.renderXrFrame (entities model) |> Effect.Task.attempt RenderedXrFrame
+                    , WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
                     )
 
         KeyDown key ->
             ( model
             , if key == "Escape" then
-                WebGL.endXrSession |> Effect.Task.perform (\() -> EndedXrSession)
+                WebGL.endXrSession |> Task.perform (\() -> EndedXrSession)
 
               else
                 Command.none
@@ -235,6 +247,19 @@ update msg model =
 
         GotStartTime startTime ->
             ( { model | startTime = startTime }, Command.none )
+
+        GotCloudTexture result ->
+            ( { model
+                | cloudTexture =
+                    case result of
+                        Ok texture ->
+                            LoadedTexture texture
+
+                        Err error ->
+                            TextureError error
+              }
+            , Command.none
+            )
 
 
 getBoundaryMesh : Maybe (List Vec2) -> Mesh Vertex
@@ -413,17 +438,26 @@ entities model { time, xrView, inputs } =
                         []
             )
             inputs
-        ++ [ WebGL.entityWith
-                [ blend, DepthTest.default ]
-                cloudVertexShader
-                cloudFragmentShader
-                clouds
-                { perspective = xrView.projectionMatrix
-                , viewMatrix = xrView.orientation.inverseMatrix
-                , modelTransform = Mat4.identity
-                , texture = cloudTexture
-                }
-           ]
+        ++ (case model.cloudTexture of
+                LoadedTexture texture ->
+                    [ WebGL.entityWith
+                        [ blend, DepthTest.default ]
+                        cloudVertexShader
+                        cloudFragmentShader
+                        clouds
+                        { perspective = xrView.projectionMatrix
+                        , viewMatrix = xrView.orientation.inverseMatrix
+                        , modelTransform = Mat4.makeTranslate3 0 0 1 |> Mat4.scale3 1 1 0.5
+                        , texture = texture
+                        }
+                    ]
+
+                LoadingTexture ->
+                    []
+
+                TextureError _ ->
+                    []
+           )
 
 
 blend : Setting
@@ -460,10 +494,10 @@ clouds : Mesh Vertex
 clouds =
     let
         start =
-            0.5
+            0
 
         height =
-            0.3
+            1
 
         layers =
             30
@@ -478,10 +512,10 @@ clouds =
                     t =
                         start + height * toFloat index / layers
                 in
-                [ { position = Vec3.vec3 size t -size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = Vec3.vec3 size t size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = Vec3.vec3 -size t size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = Vec3.vec3 -size t -size, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                [ { position = Vec3.vec3 size 0 t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = Vec3.vec3 size size t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = Vec3.vec3 0 size t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
+                , { position = Vec3.vec3 0 0 t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
                 ]
             )
         |> List.reverse
@@ -703,18 +737,18 @@ void main(void) {
     |]
 
 
-cloudFragmentShader : Shader {} CloudUniforms { vColor : Vec3, vPosition : Vec3 }
+cloudFragmentShader : Shader {} { u | texture : Texture } { vColor : Vec3, vPosition : Vec3 }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vColor;
 varying vec3 vPosition;
 
-uniform mat4 modelTransform;
-uniform mat4 viewMatrix;
-uniform mat4 perspective;
+uniform sampler2D texture;
 
 void main(void) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 0.1);
+    float a = texture2D(texture, vPosition.xy).x;
+
+    gl_FragColor = vec4(vColor, a > vPosition.z ? 0.1 : 0.0);
 }
     |]

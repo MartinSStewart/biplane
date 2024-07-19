@@ -6,6 +6,7 @@ import Effect.Browser.Navigation
 import Effect.Http
 import Effect.Time as Time
 import Effect.WebGL
+import Effect.WebGL.Texture exposing (Texture)
 import Length exposing (Meters)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
@@ -25,7 +26,14 @@ type alias FrontendModel =
     , previousBoundary : Maybe (List Vec2)
     , biplaneMesh : Effect.WebGL.Mesh Vertex
     , startTime : Time.Posix
+    , cloudTexture : TextureStatus
     }
+
+
+type TextureStatus
+    = LoadingTexture
+    | LoadedTexture Texture
+    | TextureError Effect.WebGL.Texture.Error
 
 
 type alias Vertex =
@@ -53,6 +61,7 @@ type FrontendMsg
     | GotBiplaneObj (Result Effect.Http.Error (TriangularMesh { position : Point3d Meters ObjCoordinates, normal : Vector3d Unitless ObjCoordinates }))
     | TriggeredEndXrSession
     | GotStartTime Time.Posix
+    | GotCloudTexture (Result Effect.WebGL.Texture.Error Texture)
 
 
 type ToBackend
