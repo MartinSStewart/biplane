@@ -490,7 +490,7 @@ sunMesh =
         |> quadsToMesh
 
 
-clouds : Mesh Vertex
+clouds : Mesh CloudVertex
 clouds =
     let
         start =
@@ -504,22 +504,44 @@ clouds =
 
         size =
             1
+
+        vertices : List CloudVertex
+        vertices =
+            List.range 0 (layers - 1)
+                |> List.concatMap
+                    (\index ->
+                        let
+                            t0 =
+                                start + height * toFloat index / layers
+
+                            t1 =
+                                start + height * toFloat (index + 1) / layers
+                        in
+                        [ { position = Vec3.vec3 0 0 t0 }
+                        , { position = Vec3.vec3 size 0 t0 }
+                        , { position = Vec3.vec3 size size t0 }
+                        , { position = Vec3.vec3 0 size t0 }
+                        , { position = Vec3.vec3 (size / 2) (size / 2) t1 }
+                        ]
+                    )
+
+        indices : List ( Int, Int, Int )
+        indices =
+            List.range 0 (layers - 1)
+                |> List.concatMap
+                    (\index ->
+                        let
+                            i =
+                                index * 5
+                        in
+                        [ ( i, i + 1, i + 4 )
+                        , ( i + 1, i + 2, i + 4 )
+                        , ( i + 2, i + 3, i + 4 )
+                        , ( i + 3, i, i + 4 )
+                        ]
+                    )
     in
-    List.range 0 (layers - 1)
-        |> List.concatMap
-            (\index ->
-                let
-                    t =
-                        start + height * toFloat index / layers
-                in
-                [ { position = Vec3.vec3 size 0 t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = Vec3.vec3 size size t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = Vec3.vec3 0 size t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                , { position = Vec3.vec3 0 0 t, color = Vec3.vec3 1 1 1, normal = Vec3.vec3 0 1 0 }
-                ]
-            )
-        |> List.reverse
-        |> quadsToMesh
+    WebGL.indexedTriangles vertices indices
 
 
 floorAxes : Mesh Vertex
@@ -716,32 +738,28 @@ void main () {
     |]
 
 
-cloudVertexShader : Shader Vertex CloudUniforms { vColor : Vec3, vPosition : Vec3 }
+cloudVertexShader : Shader CloudVertex CloudUniforms { vPosition : Vec3 }
 cloudVertexShader =
     [glsl|
 attribute vec3 position;
-attribute vec3 color;
 
 uniform mat4 modelTransform;
 uniform mat4 viewMatrix;
 uniform mat4 perspective;
 
-varying vec3 vColor;
 varying vec3 vPosition;
 
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
-    vColor = color;
     vPosition = position;
 }
     |]
 
 
-cloudFragmentShader : Shader {} { u | texture : Texture } { vColor : Vec3, vPosition : Vec3 }
+cloudFragmentShader : Shader {} { u | texture : Texture } { vPosition : Vec3 }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
-varying vec3 vColor;
 varying vec3 vPosition;
 
 uniform sampler2D texture;
@@ -749,6 +767,6 @@ uniform sampler2D texture;
 void main(void) {
     float a = texture2D(texture, vPosition.xy).x;
 
-    gl_FragColor = vec4(vColor, a > vPosition.z ? 0.1 : 0.0);
+    gl_FragColor = vec4(1.0, 1.0, 1.0, a > vPosition.z ? 0.1 : 0.0);
 }
     |]

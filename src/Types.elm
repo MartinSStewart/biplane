@@ -43,6 +43,11 @@ type alias Vertex =
     }
 
 
+type alias CloudVertex =
+    { position : Vec3
+    }
+
+
 type alias BackendModel =
     { message : String
     }
