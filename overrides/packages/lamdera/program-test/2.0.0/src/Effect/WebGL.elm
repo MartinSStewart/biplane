@@ -54,8 +54,9 @@ import Effect.Internal
 import Effect.Task
 import Effect.Time
 import Html exposing (Attribute, Html)
-import Math.Matrix4 exposing (Mat4)
-import Math.Vector3 exposing (Vec3)
+import Math.Matrix4 as Mat4 exposing (Mat4)
+import Math.Vector2 exposing (Vec2)
+import Math.Vector3 as Vec3 exposing (Vec3)
 import WebGL
 import WebGL.Settings exposing (Setting)
 import WebGLFix
@@ -367,7 +368,7 @@ type XrStartError
 
 
 type alias XrStartData =
-    { boundary : Maybe (List Vec3) }
+    { boundary : Maybe (List Vec2) }
 
 
 requestXrStart : List WebGLFix.Option -> Effect.Task.Task FrontendOnly XrStartError XrStartData
@@ -396,7 +397,7 @@ type alias XrPose =
     { transform : Mat4
     , views : List XrView
     , time : Effect.Time.Posix
-    , boundary : Maybe (List Vec3)
+    , boundary : Maybe (List Vec2)
     , inputs : List XrInput
     }
 
@@ -429,6 +430,52 @@ type XrEyeType
     | OtherEye
 
 
+zUpMat : Mat4
+zUpMat =
+    Mat4.fromRecord
+        { m11 = 1
+        , m21 = 0
+        , m31 = 0
+        , m41 = 0
+        , m12 = 0
+        , m22 = 0
+        , m32 = 1
+        , m42 = 0
+        , m13 = 0
+        , m23 = 1
+        , m33 = 0
+        , m43 = 0
+        , m14 = 0
+        , m24 = 0
+        , m34 = 0
+        , m44 = 1
+        }
+
+
+zUpMatInverse : Mat4
+zUpMatInverse =
+    Mat4.inverseOrthonormal zUpMat
+
+
+convertMatToZUp : Mat4 -> Mat4
+convertMatToZUp mat4 =
+    Mat4.mul mat4 zUpMat
+
+
+convertVecToZUp : Vec3 -> Vec3
+convertVecToZUp vec3 =
+    Vec3.vec3 (Vec3.getX vec3) (Vec3.getZ vec3) (Vec3.getY vec3)
+
+
+orientationToZUp : XrOrientation -> XrOrientation
+orientationToZUp xrOrientation =
+    { position = convertVecToZUp xrOrientation.position
+    , direction = convertVecToZUp xrOrientation.direction
+    , matrix = convertMatToZUp xrOrientation.matrix
+    , inverseMatrix = convertMatToZUp xrOrientation.inverseMatrix
+    }
+
+
 renderXrFrame :
     ({ time : Effect.Time.Posix, xrView : XrView, inputs : List XrInput } -> List Entity)
     -> Effect.Task.Task FrontendOnly XrRenderError XrPose
@@ -449,7 +496,7 @@ renderXrFrame entities =
                             Effect.Internal.OtherEye ->
                                 OtherEye
                     , projectionMatrix = xrView.projectionMatrix
-                    , orientation = xrView.orientation
+                    , orientation = orientationToZUp xrView.orientation
                     }
             in
             entities
@@ -477,7 +524,7 @@ renderXrFrame entities =
                                             Effect.Internal.OtherEye ->
                                                 OtherEye
                                     , projectionMatrix = view.projectionMatrix
-                                    , orientation = view.orientation
+                                    , orientation = orientationToZUp view.orientation
                                     }
                                 )
                                 ok.views
@@ -508,7 +555,16 @@ inputFromInternal input =
 
             Effect.Internal.Unknown ->
                 Unknown
-    , orientation = input.orientation
+    , orientation =
+        Maybe.map
+            (\a ->
+                { position = convertVecToZUp a.position
+                , direction = convertVecToZUp a.direction
+                , matrix = Mat4.mul zUpMatInverse a.matrix
+                , inverseMatrix = Mat4.mul zUpMatInverse a.inverseMatrix
+                }
+            )
+            input.orientation
     , mapping = input.mapping
     , buttons = input.buttons
     }

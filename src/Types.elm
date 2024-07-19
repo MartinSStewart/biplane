@@ -7,6 +7,7 @@ import Effect.Http
 import Effect.Time as Time
 import Effect.WebGL
 import Length exposing (Meters)
+import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
 import Obj.Decode exposing (ObjCoordinates)
 import Point3d exposing (Point3d)
@@ -21,7 +22,7 @@ type alias FrontendModel =
     , time : Time.Posix
     , isInVr : Bool
     , boundaryMesh : Effect.WebGL.Mesh Vertex
-    , previousBoundary : Maybe (List Vec3)
+    , previousBoundary : Maybe (List Vec2)
     , biplaneMesh : Effect.WebGL.Mesh Vertex
     , startTime : Time.Posix
     }

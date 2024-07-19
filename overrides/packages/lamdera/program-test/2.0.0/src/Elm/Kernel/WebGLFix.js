@@ -5,7 +5,7 @@ import WebGLFix.Internal as WI exposing (enableSetting, enableOption)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
 import Effect.Internal as EI exposing (NotSupported, AlreadyStarted, XrSessionNotStarted, XrLostTracking, LeftEye, RightEye, OtherEye, LeftHand, RightHand, Unknown)
 import Elm.Kernel.List exposing (fromArray)
-import Elm.Kernel.MJS exposing (v3)
+import Elm.Kernel.MJS exposing (v2, v3)
 import Maybe exposing (Just, Nothing)
 
 */
@@ -901,7 +901,7 @@ function _WebGLFix_requestXrStart(options) {
 
                             let xrStartData = { __$boundary : __Maybe_Nothing };
 
-                            xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
+                            xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, p.z); })));
                             callback(__Scheduler_succeed(xrStartData));
 
                         })
@@ -1013,7 +1013,7 @@ function _WebGLFix_renderXrFrame(entities) {
 
 
                     if (xrReferenceSpace.boundsGeometry) {
-                         poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A3(__MJS_v3, p.x, p.y, p.z); })));
+                         poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, p.z); })));
                     }
 
                     let glLayer = frame.session.renderState.baseLayer;

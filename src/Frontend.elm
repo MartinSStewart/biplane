@@ -26,6 +26,7 @@ import Lamdera
 import Length exposing (Meters)
 import List.Extra
 import Math.Matrix4 as Mat4 exposing (Mat4)
+import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Obj.Decode
 import Point3d
@@ -204,13 +205,13 @@ update msg model =
             ( { model | startTime = startTime }, Command.none )
 
 
-getBoundaryMesh : Maybe (List Vec3) -> Mesh Vertex
+getBoundaryMesh : Maybe (List Vec2) -> Mesh Vertex
 getBoundaryMesh maybeBoundary =
     case maybeBoundary of
         Just (first :: rest) ->
             let
                 heightOffset =
-                    Vec3.vec3 0 1 0
+                    1
 
                 length =
                     List.length rest + 1 |> toFloat
@@ -220,14 +221,26 @@ getBoundaryMesh maybeBoundary =
                     let
                         t =
                             state.index / length
+
+                        x1 =
+                            Vec2.getX v
+
+                        y1 =
+                            Vec2.getY v
+
+                        x2 =
+                            Vec2.getX state.first
+
+                        y2 =
+                            Vec2.getY state.first
                     in
                     { index = state.index + 1
                     , first = v
                     , quads =
-                        { position = state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
-                            :: { position = v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
-                            :: { position = Vec3.add heightOffset v, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
-                            :: { position = Vec3.add heightOffset state.first, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                        { position = Vec3.vec3 x2 y2 0, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                            :: { position = Vec3.vec3 x1 y1 0, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                            :: { position = Vec3.vec3 x1 y1 heightOffset, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                            :: { position = Vec3.vec3 x2 y2 heightOffset, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
                             :: state.quads
                     }
                 )
@@ -303,15 +316,15 @@ entities model { time, xrView, inputs } =
         , modelTransform = Mat4.identity
         , cameraPosition = xrView.orientation.position
         }
-
-    --, WebGL.entity
-    --    vertexShader
-    --    fragmentShader
-    --    model.boundaryMesh
-    --    { perspective = xrView.projectionMatrix
-    --    , viewMatrix = xrView.viewMatrixInverse
-    --    , modelTransform = Mat4.identity
-    --    }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        model.boundaryMesh
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.orientation.inverseMatrix
+        , modelTransform = Mat4.identity
+        , cameraPosition = xrView.orientation.position
+        }
     , WebGL.entity
         vertexShader
         fragmentShader
@@ -333,15 +346,6 @@ entities model { time, xrView, inputs } =
     , WebGL.entity
         vertexShader
         fragmentShader
-        sphere
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
-        , cameraPosition = Vec3.vec3 1.5 0 0 --xrView.orientation.position
-        }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
         verticalLine
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
@@ -349,11 +353,11 @@ entities model { time, xrView, inputs } =
         , cameraPosition = xrView.orientation.position
         }
     ]
-        ++ List.filterMap
+        ++ List.concatMap
             (\input ->
                 case ( input.orientation, input.handedness ) of
                     ( Just orientation, WebGL.RightHand ) ->
-                        WebGL.entity
+                        [ WebGL.entity
                             vertexShader
                             fragmentShader
                             model.biplaneMesh
@@ -362,10 +366,19 @@ entities model { time, xrView, inputs } =
                             , modelTransform = Mat4.scale3 0.01 0.01 0.01 orientation.matrix
                             , cameraPosition = xrView.orientation.position
                             }
-                            |> Just
+                        , WebGL.entity
+                            vertexShader
+                            fragmentShader
+                            sphere
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.orientation.inverseMatrix
+                            , modelTransform = Mat4.makeTranslate orientation.position
+                            , cameraPosition = xrView.orientation.position
+                            }
+                        ]
 
                     _ ->
-                        Nothing
+                        []
             )
             inputs
 
@@ -393,7 +406,7 @@ blend =
 
 
 sunPosition =
-    Vec3.vec3 0 500 0
+    Vec3.vec3 0 0 500
 
 
 sunMesh : Mesh Vertex
@@ -405,10 +418,10 @@ sunMesh =
         color =
             Vec3.vec3 1 1 1
     in
-    [ { position = Vec3.vec3 size 0 -size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 size 0 size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 -size 0 size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 -size 0 -size |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 1 0 }
+    [ { position = Vec3.vec3 size -size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 size size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 -size size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 -size -size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
     ]
         |> quadsToMesh
 
@@ -451,14 +464,14 @@ floorAxes =
         thickness =
             0.05
     in
-    [ { position = Vec3.vec3 1 0 -thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 1 0 thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 0 0 thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 0 0 -thickness, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 -thickness 0 1, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 thickness 0 1, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 1 0 }
+    [ { position = Vec3.vec3 1 -thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 1 thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 -thickness 1 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 thickness 1 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
     ]
         |> quadsToMesh
 
@@ -468,10 +481,10 @@ verticalLine =
         thickness =
             0.02
     in
-    [ { position = Vec3.vec3 0 0 -thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 0 0 thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 0 10 thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 0 10 -thickness, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 1 0 }
+    [ { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 0 thickness 10, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 0 -thickness 10, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
     ]
         |> quadsToMesh
 
@@ -485,10 +498,10 @@ waterMesh =
         color =
             Vec3.vec3 0.2 0.3 1
     in
-    [ { position = Vec3.vec3 size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 -size 0 size, color = color, normal = Vec3.vec3 0 1 0 }
-    , { position = Vec3.vec3 -size 0 -size, color = color, normal = Vec3.vec3 0 1 0 }
+    [ { position = Vec3.vec3 size -size 0, color = color, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 size size 0, color = color, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 -size size 0, color = color, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 -size -size 0, color = color, normal = Vec3.vec3 0 0 1 }
     ]
         |> quadsToMesh
 
@@ -497,7 +510,7 @@ sphere : Mesh Vertex
 sphere =
     let
         radius =
-            0.3
+            0.1
 
         position =
             Point3d.meters 0 0 0
@@ -524,8 +537,8 @@ sphere =
                         point =
                             Vector3d.meters
                                 (sin longitude * sin latitude)
-                                (cos latitude)
                                 (cos longitude * sin latitude)
+                                (cos latitude)
                     in
                     { position = Point3d.translateBy (Vector3d.scaleBy radius point) position |> Point3d.toVec3
                     , normal = Vector3d.toVec3 point
@@ -620,7 +633,7 @@ vec3 ApplyLight(
 void main () {
     vec3 color2 =
         ApplyLight(
-            vec3(0.0, 1.0, 0.0),
+            vec3(0.0, 0.0, 1.0),
             vec3(1.0, 1.0, 1.0),
             0.5,
             vColor.rgb,
