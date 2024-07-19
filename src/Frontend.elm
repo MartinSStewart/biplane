@@ -1,9 +1,8 @@
 module Frontend exposing (app)
 
-import Angle
 import Array
 import Browser exposing (UrlRequest(..))
-import Direction3d
+import Bytes.Encode
 import Duration
 import Effect.Browser.Events
 import Effect.Browser.Navigation
@@ -15,7 +14,7 @@ import Effect.Task
 import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
-import Geometry.Interop.LinearAlgebra.Direction3d as Direction3d
+import Effect.WebGL.Texture exposing (Texture)
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
 import Html
@@ -30,9 +29,9 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Obj.Decode
 import Point3d
-import SketchPlane3d
 import TriangularMesh
 import Types exposing (..)
+import Unsafe
 import Url
 import Vector3d exposing (Vector3d)
 import WebGL.Settings.Blend as Blend
@@ -75,6 +74,39 @@ init url key =
         , Time.now |> Effect.Task.perform GotStartTime
         ]
     )
+
+
+cloudTextureSize =
+    512
+
+
+cloudTexture : Effect.WebGL.Texture.Texture
+cloudTexture =
+    List.range 0 (cloudTextureSize * cloudTextureSize - 1)
+        |> List.map
+            (\index ->
+                let
+                    x =
+                        modBy cloudTextureSize index
+
+                    y =
+                        index // cloudTextureSize
+                in
+                Bytes.Encode.unsignedInt8 (modBy 256 (x + y))
+            )
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+        |> Effect.WebGL.Texture.loadBytesWith
+            { magnify = Effect.WebGL.Texture.linear
+            , minify = Effect.WebGL.Texture.linear
+            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+            , flipY = False
+            , premultiplyAlpha = False
+            }
+            ( cloudTextureSize, cloudTextureSize )
+            Effect.WebGL.Texture.luminance
+        |> Unsafe.assumeOk
 
 
 update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -381,19 +413,17 @@ entities model { time, xrView, inputs } =
                         []
             )
             inputs
-
-
-
---++ [ WebGL.entityWith
---        [ blend, DepthTest.default ]
---        cloudVertexShader
---        cloudFragmentShader
---        clouds
---        { perspective = xrView.projectionMatrix
---        , viewMatrix = xrView.viewMatrixInverse
---        , modelTransform = Mat4.identity
---        }
---   ]
+        ++ [ WebGL.entityWith
+                [ blend, DepthTest.default ]
+                cloudVertexShader
+                cloudFragmentShader
+                clouds
+                { perspective = xrView.projectionMatrix
+                , viewMatrix = xrView.orientation.inverseMatrix
+                , modelTransform = Mat4.identity
+                , texture = cloudTexture
+                }
+           ]
 
 
 blend : Setting
@@ -553,6 +583,10 @@ type alias Uniforms =
     { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, cameraPosition : Vec3 }
 
 
+type alias CloudUniforms =
+    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, texture : Texture }
+
+
 
 -- Shaders
 
@@ -648,7 +682,7 @@ void main () {
     |]
 
 
-cloudVertexShader : Shader Vertex Uniforms { vColor : Vec3, vPosition : Vec3 }
+cloudVertexShader : Shader Vertex CloudUniforms { vColor : Vec3, vPosition : Vec3 }
 cloudVertexShader =
     [glsl|
 attribute vec3 position;
@@ -669,14 +703,18 @@ void main(void) {
     |]
 
 
-cloudFragmentShader : Shader {} a { vColor : Vec3, vPosition : Vec3 }
+cloudFragmentShader : Shader {} CloudUniforms { vColor : Vec3, vPosition : Vec3 }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vColor;
 varying vec3 vPosition;
 
+uniform mat4 modelTransform;
+uniform mat4 viewMatrix;
+uniform mat4 perspective;
+
 void main(void) {
-    gl_FragColor = vec4(vColor, 0.1);
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 0.1);
 }
     |]
