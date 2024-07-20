@@ -1,7 +1,9 @@
 module Frontend exposing (app)
 
 import Array
+import Axis3d
 import Browser exposing (UrlRequest(..))
+import Direction3d exposing (Direction3d)
 import Duration
 import Effect.Browser.Events
 import Effect.Browser.Navigation
@@ -14,7 +16,7 @@ import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
 import Effect.WebGL.Texture exposing (Texture)
-import Frame3d
+import Frame3d exposing (Frame3d)
 import Geometry.Interop.LinearAlgebra.Frame3d as Frame3d
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
@@ -200,13 +202,6 @@ update msg model =
 
                                 Nothing ->
                                     False
-
-                        _ =
-                            if List.any (\input -> List.any .isPressed input.buttons) pose.inputs then
-                                Debug.log "input" pose.inputs
-
-                            else
-                                pose.inputs
                     in
                     ( { model
                         | time = pose.time
@@ -232,7 +227,7 @@ update msg model =
                         , plane =
                             case Maybe.andThen .orientation maybeInput of
                                 Just orientation ->
-                                    Point3d.fromVec3 orientation.position |> Frame3d.atPoint
+                                    mat4ToFrame3d orientation.matrix
 
                                 Nothing ->
                                     model.plane
@@ -344,6 +339,20 @@ update msg model =
               }
             , Command.none
             )
+
+
+mat4ToFrame3d : Mat4 -> Frame3d u c d
+mat4ToFrame3d mat4 =
+    let
+        { m11, m12, m13, m21, m22, m23, m31, m32, m33, m14, m24, m34 } =
+            Mat4.toRecord mat4
+    in
+    Frame3d.unsafe
+        { originPoint = Point3d.unsafe { x = m14, y = m24, z = m34 }
+        , xDirection = Direction3d.unsafe { x = m11, y = m21, z = m31 }
+        , yDirection = Direction3d.unsafe { x = m12, y = m22, z = m32 }
+        , zDirection = Direction3d.unsafe { x = m13, y = m23, z = m33 }
+        }
 
 
 menuButtonIndex =
