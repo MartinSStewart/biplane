@@ -15,6 +15,7 @@ import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
 import Effect.WebGL.Texture exposing (Texture)
 import Frame3d
+import Geometry.Interop.LinearAlgebra.Frame3d as Frame3d
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
 import Html
@@ -69,7 +70,7 @@ init url key =
       , islandMesh = WebGL.triangleFan []
       , cloudTexture = LoadingTexture
       , plane = Frame3d.atOrigin
-      , holdingHand = Nothing
+      , holdingHand = Just 1
       , bullets = []
       , lastShot = Time.millisToPosix 0
       }
@@ -178,13 +179,21 @@ update msg model =
             case result of
                 Ok pose ->
                     let
+                        maybeInput : Maybe WebGL.XrInput
+                        maybeInput =
+                            Maybe.andThen (\index -> List.Extra.getAt index pose.inputs) model.holdingHand
+
                         isShooting : Bool
                         isShooting =
-                            case Maybe.andThen (\index -> List.Extra.getAt index pose.inputs) model.holdingHand of
+                            case maybeInput of
                                 Just input ->
                                     case List.Extra.getAt 0 input.buttons of
                                         Just button ->
-                                            button.value > 0.5
+                                            if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 200) then
+                                                button.value > 0.5
+
+                                            else
+                                                False
 
                                         Nothing ->
                                             False
@@ -192,8 +201,12 @@ update msg model =
                                 Nothing ->
                                     False
 
-                        canShoot =
-                            Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 200)
+                        _ =
+                            if List.any (\input -> List.any .isPressed input.buttons) pose.inputs then
+                                Debug.log "input" pose.inputs
+
+                            else
+                                pose.inputs
                     in
                     ( { model
                         | time = pose.time
@@ -205,20 +218,33 @@ update msg model =
                             else
                                 getBoundaryMesh pose.boundary
                         , bullets =
-                            if isShooting && canShoot then
+                            if isShooting then
                                 { position = Point3d.origin, velocity = Vector3d.zero } :: model.bullets
 
                             else
                                 model.bullets
+                        , lastShot =
+                            if isShooting then
+                                pose.time
+
+                            else
+                                model.lastShot
+                        , plane =
+                            case Maybe.andThen .orientation maybeInput of
+                                Just orientation ->
+                                    Point3d.fromVec3 orientation.position |> Frame3d.atPoint
+
+                                Nothing ->
+                                    model.plane
                       }
                     , Command.batch
                         [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
                         , if
                             List.any
                                 (\input ->
-                                    case List.Extra.getAt 1 input.buttons of
+                                    case List.Extra.getAt menuButtonIndex input.buttons of
                                         Just button ->
-                                            button.value > 0.5
+                                            button.value >= 1
 
                                         Nothing ->
                                             False
@@ -318,6 +344,44 @@ update msg model =
               }
             , Command.none
             )
+
+
+menuButtonIndex =
+    12
+
+
+abc =
+    [ { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = True, value = 0.16078431904315948 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = True, value = 1 }
+    , { isPressed = False, isTouched = True, value = 1 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = True, isTouched = True, value = 1 }
+    ]
+
+
+qwe =
+    [ { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = True, value = 0.9450981020927429 }
+    , { isPressed = False, isTouched = True, value = 0.08235294371843338 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = False, isTouched = True, value = 1 }
+    , { isPressed = False, isTouched = False, value = 0 }
+    , { isPressed = True, isTouched = True, value = 1 }
+    ]
 
 
 getBoundaryMesh : Maybe (List Vec2) -> Mesh Vertex
@@ -471,36 +535,16 @@ entities model { time, xrView, inputs } =
         , modelTransform = Mat4.identity
         , cameraPosition = xrView.orientation.position
         }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        model.biplaneMesh
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.orientation.inverseMatrix
+        , modelTransform = Mat4.mul (Frame3d.toMat4 model.plane) worldScale
+        , cameraPosition = xrView.orientation.position
+        }
     ]
-        ++ List.concatMap
-            (\input ->
-                case ( input.orientation, input.handedness ) of
-                    ( Just orientation, WebGL.RightHand ) ->
-                        [ WebGL.entity
-                            vertexShader
-                            fragmentShader
-                            model.biplaneMesh
-                            { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.orientation.inverseMatrix
-                            , modelTransform = Mat4.mul orientation.matrix worldScale
-                            , cameraPosition = xrView.orientation.position
-                            }
-
-                        --, WebGL.entity
-                        --    vertexShader
-                        --    fragmentShader
-                        --    sphere
-                        --    { perspective = xrView.projectionMatrix
-                        --    , viewMatrix = xrView.orientation.inverseMatrix
-                        --    , modelTransform = Mat4.makeTranslate orientation.position
-                        --    , cameraPosition = xrView.orientation.position
-                        --    }
-                        ]
-
-                    _ ->
-                        []
-            )
-            inputs
         ++ (case model.cloudTexture of
                 LoadedTexture texture ->
                     [ WebGL.entityWith
