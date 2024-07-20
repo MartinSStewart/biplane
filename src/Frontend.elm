@@ -14,6 +14,7 @@ import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
 import Effect.WebGL.Texture exposing (Texture)
+import Frame3d
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
 import Html
@@ -28,6 +29,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Obj.Decode
 import Point3d
+import Quantity
 import TriangularMesh
 import Types exposing (..)
 import Url
@@ -66,6 +68,10 @@ init url key =
       , biplaneMesh = WebGL.triangleFan []
       , islandMesh = WebGL.triangleFan []
       , cloudTexture = LoadingTexture
+      , plane = Frame3d.atOrigin
+      , holdingHand = Nothing
+      , bullets = []
+      , lastShot = Time.millisToPosix 0
       }
     , Command.batch
         [ Effect.Http.get
@@ -171,6 +177,24 @@ update msg model =
         RenderedXrFrame result ->
             case result of
                 Ok pose ->
+                    let
+                        isShooting : Bool
+                        isShooting =
+                            case Maybe.andThen (\index -> List.Extra.getAt index pose.inputs) model.holdingHand of
+                                Just input ->
+                                    case List.Extra.getAt 0 input.buttons of
+                                        Just button ->
+                                            button.value > 0.5
+
+                                        Nothing ->
+                                            False
+
+                                Nothing ->
+                                    False
+
+                        canShoot =
+                            Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 200)
+                    in
                     ( { model
                         | time = pose.time
                         , previousBoundary = pose.boundary
@@ -180,13 +204,19 @@ update msg model =
 
                             else
                                 getBoundaryMesh pose.boundary
+                        , bullets =
+                            if isShooting && canShoot then
+                                { position = Point3d.origin, velocity = Vector3d.zero } :: model.bullets
+
+                            else
+                                model.bullets
                       }
                     , Command.batch
                         [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
                         , if
                             List.any
                                 (\input ->
-                                    case List.Extra.getAt 0 input.buttons of
+                                    case List.Extra.getAt 1 input.buttons of
                                         Just button ->
                                             button.value > 0.5
 

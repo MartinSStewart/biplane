@@ -2,11 +2,13 @@ module Types exposing (..)
 
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
+import Direction3d exposing (Direction3d)
 import Effect.Browser.Navigation
 import Effect.Http
 import Effect.Time as Time
 import Effect.WebGL
 import Effect.WebGL.Texture exposing (Texture)
+import Frame3d exposing (Frame3d)
 import Length exposing (Meters)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
@@ -29,6 +31,24 @@ type alias FrontendModel =
     , islandMesh : Effect.WebGL.Mesh Vertex
     , startTime : Time.Posix
     , cloudTexture : TextureStatus
+    , bullets : List Bullet
+    , lastShot : Time.Posix
+    , holdingHand : Maybe Int
+    , plane : Frame3d Meters World { defines : PlaneLocal }
+    }
+
+
+type PlaneLocal
+    = PlaneLocal Never
+
+
+type World
+    = World Never
+
+
+type alias Bullet =
+    { position : Point3d Meters World
+    , velocity : Vector3d Meters World
     }
 
 
