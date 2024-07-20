@@ -60,6 +60,7 @@ init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command Fron
 init url key =
     ( { key = key
       , time = Time.millisToPosix 0
+      , lastVrUpdate = Time.millisToPosix 0
       , startTime = Time.millisToPosix 0
       , isInVr = False
       , boundaryMesh = WebGL.triangleFan []
@@ -81,7 +82,7 @@ init url key =
             , flipY = False
             , premultiplyAlpha = False
             }
-            "/cloud-texture.jpg"
+            "/cloud-texture.png"
             |> Task.attempt GotCloudTexture
         ]
     )
@@ -423,15 +424,16 @@ entities model { time, xrView, inputs } =
                             , modelTransform = Mat4.scale3 0.01 0.01 0.01 orientation.matrix
                             , cameraPosition = xrView.orientation.position
                             }
-                        , WebGL.entity
-                            vertexShader
-                            fragmentShader
-                            sphere
-                            { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.orientation.inverseMatrix
-                            , modelTransform = Mat4.makeTranslate orientation.position
-                            , cameraPosition = xrView.orientation.position
-                            }
+
+                        --, WebGL.entity
+                        --    vertexShader
+                        --    fragmentShader
+                        --    sphere
+                        --    { perspective = xrView.projectionMatrix
+                        --    , viewMatrix = xrView.orientation.inverseMatrix
+                        --    , modelTransform = Mat4.makeTranslate orientation.position
+                        --    , cameraPosition = xrView.orientation.position
+                        --    }
                         ]
 
                     _ ->
@@ -447,7 +449,7 @@ entities model { time, xrView, inputs } =
                         clouds
                         { perspective = xrView.projectionMatrix
                         , viewMatrix = xrView.orientation.inverseMatrix
-                        , modelTransform = Mat4.makeTranslate3 0 0 1 |> Mat4.scale3 1 1 0.5
+                        , modelTransform = Mat4.makeTranslate3 0 0 1 |> Mat4.scale3 1 1 0.2
                         , texture = texture
                         }
                     ]
@@ -504,44 +506,22 @@ clouds =
 
         size =
             1
-
-        vertices : List CloudVertex
-        vertices =
-            List.range 0 (layers - 1)
-                |> List.concatMap
-                    (\index ->
-                        let
-                            t0 =
-                                start + height * toFloat index / layers
-
-                            t1 =
-                                start + height * toFloat (index + 1) / layers
-                        in
-                        [ { position = Vec3.vec3 0 0 t0 }
-                        , { position = Vec3.vec3 size 0 t0 }
-                        , { position = Vec3.vec3 size size t0 }
-                        , { position = Vec3.vec3 0 size t0 }
-                        , { position = Vec3.vec3 (size / 2) (size / 2) t1 }
-                        ]
-                    )
-
-        indices : List ( Int, Int, Int )
-        indices =
-            List.range 0 (layers - 1)
-                |> List.concatMap
-                    (\index ->
-                        let
-                            i =
-                                index * 5
-                        in
-                        [ ( i, i + 1, i + 4 )
-                        , ( i + 1, i + 2, i + 4 )
-                        , ( i + 2, i + 3, i + 4 )
-                        , ( i + 3, i, i + 4 )
-                        ]
-                    )
     in
-    WebGL.indexedTriangles vertices indices
+    List.range 0 (layers - 1)
+        |> List.concatMap
+            (\index ->
+                let
+                    t =
+                        start + height * toFloat index / layers
+                in
+                [ { position = Vec3.vec3 size 0 t }
+                , { position = Vec3.vec3 size size t }
+                , { position = Vec3.vec3 0 size t }
+                , { position = Vec3.vec3 0 0 t }
+                ]
+            )
+        |> List.reverse
+        |> quadsToMesh
 
 
 floorAxes : Mesh Vertex
@@ -767,6 +747,6 @@ uniform sampler2D texture;
 void main(void) {
     float a = texture2D(texture, vPosition.xy).x;
 
-    gl_FragColor = vec4(1.0, 1.0, 1.0, a > vPosition.z ? 0.1 : 0.0);
+    gl_FragColor = vec4(1.0, 1.0, 1.0, min(0.2, a - vPosition.z));
 }
     |]

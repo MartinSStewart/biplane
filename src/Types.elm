@@ -21,6 +21,7 @@ import Vector3d exposing (Vector3d)
 type alias FrontendModel =
     { key : Effect.Browser.Navigation.Key
     , time : Time.Posix
+    , lastVrUpdate : Time.Posix
     , isInVr : Bool
     , boundaryMesh : Effect.WebGL.Mesh Vertex
     , previousBoundary : Maybe (List Vec2)
