@@ -2,7 +2,6 @@ module Frontend exposing (app)
 
 import Array
 import Browser exposing (UrlRequest(..))
-import Bytes.Encode
 import Duration
 import Effect.Browser.Events
 import Effect.Browser.Navigation
@@ -31,7 +30,6 @@ import Obj.Decode
 import Point3d
 import TriangularMesh
 import Types exposing (..)
-import Unsafe
 import Url
 import Vector3d exposing (Vector3d)
 import WebGL.Settings.Blend as Blend
@@ -66,12 +64,17 @@ init url key =
       , boundaryMesh = WebGL.triangleFan []
       , previousBoundary = Nothing
       , biplaneMesh = WebGL.triangleFan []
+      , islandMesh = WebGL.triangleFan []
       , cloudTexture = LoadingTexture
       }
     , Command.batch
         [ Effect.Http.get
             { url = "/biplane.obj"
             , expect = Obj.Decode.expectObj GotBiplaneObj Length.meters Obj.Decode.faces
+            }
+        , Effect.Http.get
+            { url = "/island.obj"
+            , expect = Obj.Decode.expectObj GotIslandObj Length.meters Obj.Decode.faces
             }
         , Time.now |> Task.perform GotStartTime
         , Effect.WebGL.Texture.loadWith
@@ -230,7 +233,31 @@ update msg model =
                                     |> List.map
                                         (\point ->
                                             { position = Point3d.toVec3 point.position
-                                            , color = Vec3.vec3 1 1 0
+                                            , color = Vec3.vec3 0.8 0.8 0
+                                            , normal = Vector3d.toVec3 point.normal
+                                            }
+                                        )
+                                )
+                                (TriangularMesh.faceIndices mesh2)
+                      }
+                    , Command.none
+                    )
+
+                Err error ->
+                    ( model, Command.none )
+
+        GotIslandObj result ->
+            case result of
+                Ok mesh2 ->
+                    ( { model
+                        | islandMesh =
+                            WebGL.indexedTriangles
+                                (TriangularMesh.vertices mesh2
+                                    |> Array.toList
+                                    |> List.map
+                                        (\point ->
+                                            { position = Point3d.toVec3 point.position
+                                            , color = Vec3.vec3 0.6 0.6 0.2
                                             , normal = Vector3d.toVec3 point.normal
                                             }
                                         )
@@ -269,7 +296,7 @@ getBoundaryMesh maybeBoundary =
         Just (first :: rest) ->
             let
                 heightOffset =
-                    1
+                    0.05
 
                 length =
                     List.length rest + 1 |> toFloat
@@ -363,12 +390,25 @@ view model =
     }
 
 
+worldScale =
+    Mat4.makeScale3 0.01 0.01 0.01
+
+
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model { time, xrView, inputs } =
-    [ WebGL.entity
+    [ --WebGL.entity
+      --    vertexShader
+      --    fragmentShader
+      --    floorAxes
+      --    { perspective = xrView.projectionMatrix
+      --    , viewMatrix = xrView.orientation.inverseMatrix
+      --    , modelTransform = Mat4.identity
+      --    , cameraPosition = xrView.orientation.position
+      --    }
+      WebGL.entity
         vertexShader
         fragmentShader
-        floorAxes
+        model.boundaryMesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform = Mat4.identity
@@ -377,10 +417,10 @@ entities model { time, xrView, inputs } =
     , WebGL.entity
         vertexShader
         fragmentShader
-        model.boundaryMesh
+        model.islandMesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
+        , modelTransform = worldScale
         , cameraPosition = xrView.orientation.position
         }
     , WebGL.entity
@@ -401,15 +441,6 @@ entities model { time, xrView, inputs } =
         , modelTransform = Mat4.identity
         , cameraPosition = xrView.orientation.position
         }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        verticalLine
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
-        , cameraPosition = xrView.orientation.position
-        }
     ]
         ++ List.concatMap
             (\input ->
@@ -421,7 +452,7 @@ entities model { time, xrView, inputs } =
                             model.biplaneMesh
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.orientation.inverseMatrix
-                            , modelTransform = Mat4.scale3 0.01 0.01 0.01 orientation.matrix
+                            , modelTransform = Mat4.mul orientation.matrix worldScale
                             , cameraPosition = xrView.orientation.position
                             }
 

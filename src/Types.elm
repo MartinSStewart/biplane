@@ -26,6 +26,7 @@ type alias FrontendModel =
     , boundaryMesh : Effect.WebGL.Mesh Vertex
     , previousBoundary : Maybe (List Vec2)
     , biplaneMesh : Effect.WebGL.Mesh Vertex
+    , islandMesh : Effect.WebGL.Mesh Vertex
     , startTime : Time.Posix
     , cloudTexture : TextureStatus
     }
@@ -65,6 +66,7 @@ type FrontendMsg
     | KeyDown String
     | EndedXrSession
     | GotBiplaneObj (Result Effect.Http.Error (TriangularMesh { position : Point3d Meters ObjCoordinates, normal : Vector3d Unitless ObjCoordinates }))
+    | GotIslandObj (Result Effect.Http.Error (TriangularMesh { position : Point3d Meters ObjCoordinates, normal : Vector3d Unitless ObjCoordinates }))
     | TriggeredEndXrSession
     | GotStartTime Time.Posix
     | GotCloudTexture (Result Effect.WebGL.Texture.Error Texture)
