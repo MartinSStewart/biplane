@@ -1,8 +1,7 @@
 module Types exposing (..)
 
 import Browser exposing (UrlRequest)
-import Browser.Navigation exposing (Key)
-import Direction3d exposing (Direction3d)
+import Duration exposing (Seconds)
 import Effect.Browser.Navigation
 import Effect.Http
 import Effect.Time as Time
@@ -14,7 +13,7 @@ import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
 import Obj.Decode exposing (ObjCoordinates)
 import Point3d exposing (Point3d)
-import Quantity exposing (Unitless)
+import Quantity exposing (Rate, Unitless)
 import TriangularMesh exposing (TriangularMesh)
 import Url exposing (Url)
 import Vector3d exposing (Vector3d)
@@ -48,7 +47,8 @@ type World
 
 type alias Bullet =
     { position : Point3d Meters World
-    , velocity : Vector3d Meters World
+    , velocity : Vector3d (Rate Meters Seconds) World
+    , firedAt : Time.Posix
     }
 
 

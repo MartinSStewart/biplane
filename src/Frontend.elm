@@ -1,10 +1,9 @@
 module Frontend exposing (app)
 
 import Array
-import Axis3d
 import Browser exposing (UrlRequest(..))
 import Direction3d exposing (Direction3d)
-import Duration
+import Duration exposing (Duration, Seconds)
 import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -31,8 +30,8 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Obj.Decode
-import Point3d
-import Quantity
+import Point3d exposing (Point3d)
+import Quantity exposing (Quantity, Rate)
 import TriangularMesh
 import Types exposing (..)
 import Url
@@ -180,78 +179,7 @@ update msg model =
         RenderedXrFrame result ->
             case result of
                 Ok pose ->
-                    let
-                        maybeInput : Maybe WebGL.XrInput
-                        maybeInput =
-                            Maybe.andThen (\index -> List.Extra.getAt index pose.inputs) model.holdingHand
-
-                        isShooting : Bool
-                        isShooting =
-                            case maybeInput of
-                                Just input ->
-                                    case List.Extra.getAt 0 input.buttons of
-                                        Just button ->
-                                            if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 200) then
-                                                button.value > 0.5
-
-                                            else
-                                                False
-
-                                        Nothing ->
-                                            False
-
-                                Nothing ->
-                                    False
-                    in
-                    ( { model
-                        | time = pose.time
-                        , previousBoundary = pose.boundary
-                        , boundaryMesh =
-                            if model.previousBoundary == pose.boundary then
-                                model.boundaryMesh
-
-                            else
-                                getBoundaryMesh pose.boundary
-                        , bullets =
-                            if isShooting then
-                                { position = Point3d.origin, velocity = Vector3d.zero } :: model.bullets
-
-                            else
-                                model.bullets
-                        , lastShot =
-                            if isShooting then
-                                pose.time
-
-                            else
-                                model.lastShot
-                        , plane =
-                            case Maybe.andThen .orientation maybeInput of
-                                Just orientation ->
-                                    mat4ToFrame3d orientation.matrix
-
-                                Nothing ->
-                                    model.plane
-                      }
-                    , Command.batch
-                        [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
-                        , if
-                            List.any
-                                (\input ->
-                                    case List.Extra.getAt menuButtonIndex input.buttons of
-                                        Just button ->
-                                            button.value >= 1
-
-                                        Nothing ->
-                                            False
-                                )
-                                pose.inputs
-                          then
-                            WebGL.endXrSession |> Task.perform (\() -> TriggeredEndXrSession)
-
-                          else
-                            Command.none
-                        ]
-                    )
+                    vrUpdate pose model
 
                 Err XrSessionNotStarted ->
                     ( { model | isInVr = False }, Command.none )
@@ -341,6 +269,111 @@ update msg model =
             )
 
 
+vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+vrUpdate pose model =
+    let
+        maybeInput : Maybe WebGL.XrInput
+        maybeInput =
+            Maybe.andThen (\index -> List.Extra.getAt index pose.inputs) model.holdingHand
+
+        isShooting : Bool
+        isShooting =
+            case maybeInput of
+                Just input ->
+                    case List.Extra.getAt 0 input.buttons of
+                        Just button ->
+                            if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 200) then
+                                False
+
+                            else
+                                button.value > 0.5
+
+                        Nothing ->
+                            False
+
+                Nothing ->
+                    False
+
+        newFrame : Frame3d Meters World { defines : PlaneLocal }
+        newFrame =
+            case Maybe.andThen .orientation maybeInput of
+                Just orientation ->
+                    mat4ToFrame3d orientation.matrix
+
+                Nothing ->
+                    model.plane
+
+        elapsedTime =
+            Duration.from model.lastVrUpdate pose.time
+    in
+    ( { model
+        | time = pose.time
+        , previousBoundary = pose.boundary
+        , boundaryMesh =
+            if model.previousBoundary == pose.boundary then
+                model.boundaryMesh
+
+            else
+                getBoundaryMesh pose.boundary
+        , bullets =
+            if isShooting then
+                { position = Frame3d.originPoint newFrame
+                , velocity = Vector3d.withLength bulletSpeed (Frame3d.zDirection newFrame)
+                , firedAt = pose.time
+                }
+                    :: List.filterMap (updateBullet elapsedTime pose.time) model.bullets
+
+            else
+                List.filterMap (updateBullet elapsedTime pose.time) model.bullets
+        , lastShot =
+            if isShooting then
+                pose.time
+
+            else
+                model.lastShot
+        , plane = newFrame
+        , lastVrUpdate = pose.time
+      }
+    , Command.batch
+        [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
+        , if
+            List.any
+                (\input ->
+                    case List.Extra.getAt menuButtonIndex input.buttons of
+                        Just button ->
+                            button.value >= 1
+
+                        Nothing ->
+                            False
+                )
+                pose.inputs
+          then
+            WebGL.endXrSession |> Task.perform (\() -> TriggeredEndXrSession)
+
+          else
+            Command.none
+        ]
+    )
+
+
+updateBullet : Duration -> Time.Posix -> Bullet -> Maybe Bullet
+updateBullet elapsedTime currentTime bullet =
+    if Duration.from bullet.firedAt currentTime |> Quantity.lessThan (Duration.seconds 2) then
+        Just
+            { position = Point3d.translateBy (Vector3d.for elapsedTime bullet.velocity) bullet.position
+            , velocity = bullet.velocity
+            , firedAt = bullet.firedAt
+            }
+
+    else
+        Nothing
+
+
+bulletSpeed : Quantity Float (Rate Meters Seconds)
+bulletSpeed =
+    Quantity.rate (Length.meters 5) Duration.second
+
+
 mat4ToFrame3d : Mat4 -> Frame3d u c d
 mat4ToFrame3d mat4 =
     let
@@ -355,42 +388,9 @@ mat4ToFrame3d mat4 =
         }
 
 
+menuButtonIndex : Int
 menuButtonIndex =
     12
-
-
-abc =
-    [ { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = True, value = 0.16078431904315948 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = True, value = 1 }
-    , { isPressed = False, isTouched = True, value = 1 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = True, isTouched = True, value = 1 }
-    ]
-
-
-qwe =
-    [ { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = True, value = 0.9450981020927429 }
-    , { isPressed = False, isTouched = True, value = 0.08235294371843338 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = False, isTouched = True, value = 1 }
-    , { isPressed = False, isTouched = False, value = 0 }
-    , { isPressed = True, isTouched = True, value = 1 }
-    ]
 
 
 getBoundaryMesh : Maybe (List Vec2) -> Mesh Vertex
@@ -550,10 +550,33 @@ entities model { time, xrView, inputs } =
         model.biplaneMesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.mul (Frame3d.toMat4 model.plane) worldScale
+        , modelTransform =
+            Mat4.mul (List.head inputs |> Maybe.andThen .orientation |> Maybe.map .matrix |> Maybe.withDefault Mat4.identity) worldScale
+
+        --Mat4.mul (Frame3d.toMat4 model.plane) worldScale
         , cameraPosition = xrView.orientation.position
         }
     ]
+        ++ List.map
+            (\bullet ->
+                let
+                    v1 =
+                        bullet.position
+
+                    v2 =
+                        bullet.position
+                in
+                WebGL.entity
+                    vertexShader
+                    fragmentShader
+                    (sphere bullet.position 4)
+                    { perspective = xrView.projectionMatrix
+                    , viewMatrix = xrView.orientation.inverseMatrix
+                    , modelTransform = Mat4.identity
+                    , cameraPosition = xrView.orientation.position
+                    }
+            )
+            model.bullets
         ++ (case model.cloudTexture of
                 LoadedTexture texture ->
                     [ WebGL.entityWith
@@ -686,20 +709,17 @@ waterMesh =
         |> quadsToMesh
 
 
-sphere : Mesh Vertex
-sphere =
+sphere : Point3d u c -> Int -> Mesh Vertex
+sphere position detail =
     let
         radius =
-            0.1
-
-        position =
-            Point3d.meters 0 0 0
+            0.5
 
         uDetail =
-            32
+            detail * 2
 
         vDetail =
-            16
+            detail
 
         mesh =
             TriangularMesh.indexedBall
@@ -708,17 +728,18 @@ sphere =
                 (\u v ->
                     let
                         longitude =
-                            2 * pi * toFloat u / uDetail
+                            2 * pi * toFloat u / toFloat uDetail
 
                         latitude =
-                            pi * toFloat v / vDetail
+                            pi * toFloat v / toFloat vDetail
 
-                        point : Vector3d Meters coordinate
+                        point : Vector3d u c
                         point =
-                            Vector3d.meters
-                                (sin longitude * sin latitude)
-                                (cos longitude * sin latitude)
-                                (cos latitude)
+                            Vector3d.unsafe
+                                { x = sin longitude * sin latitude
+                                , y = cos longitude * sin latitude
+                                , z = cos latitude
+                                }
                     in
                     { position = Point3d.translateBy (Vector3d.scaleBy radius point) position |> Point3d.toVec3
                     , normal = Vector3d.toVec3 point
