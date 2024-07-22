@@ -1,5 +1,6 @@
 module Frontend exposing (app)
 
+import Angle
 import Array
 import Browser exposing (UrlRequest(..))
 import Direction3d exposing (Direction3d)
@@ -497,8 +498,44 @@ worldScale =
     Mat4.makeScale3 0.01 0.01 0.01
 
 
+zUpMat : Mat4
+zUpMat =
+    Mat4.fromRecord
+        { m11 = 1
+        , m21 = 0
+        , m31 = 0
+        , m41 = 0
+        , m12 = 0
+        , m22 = 0
+        , m32 = -1
+        , m42 = 0
+        , m13 = 0
+        , m23 = 1
+        , m33 = 0
+        , m43 = 0
+        , m14 = 0
+        , m24 = 0
+        , m34 = 0
+        , m44 = 1
+        }
+        |> Mat4.inverseOrthonormal
+        |> Mat4.rotate pi (Vec3.vec3 1 0 0)
+
+
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model { time, xrView, inputs } =
+    let
+        a =
+            List.head inputs
+                |> Maybe.andThen .orientation
+                |> Maybe.map .matrix
+                |> Maybe.withDefault Mat4.identity
+                |> (\b -> Mat4.mul b zUpMat)
+
+        --|> mat4ToFrame3d
+        --|> Frame3d.rotateAroundOwn Frame3d.xAxis (Angle.turns 0.25)
+        --|> Frame3d.toMat4
+    in
     [ --WebGL.entity
       --    vertexShader
       --    fragmentShader
@@ -517,15 +554,16 @@ entities model { time, xrView, inputs } =
         , modelTransform = Mat4.identity
         , cameraPosition = xrView.orientation.position
         }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        model.islandMesh
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = worldScale
-        , cameraPosition = xrView.orientation.position
-        }
+
+    --, WebGL.entity
+    --    vertexShader
+    --    fragmentShader
+    --    model.islandMesh
+    --    { perspective = xrView.projectionMatrix
+    --    , viewMatrix = xrView.orientation.inverseMatrix
+    --    , modelTransform = worldScale
+    --    , cameraPosition = xrView.orientation.position
+    --    }
     , WebGL.entity
         vertexShader
         fragmentShader
@@ -547,11 +585,29 @@ entities model { time, xrView, inputs } =
     , WebGL.entity
         vertexShader
         fragmentShader
+        floorAxes
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.orientation.inverseMatrix
+        , modelTransform = a
+        , cameraPosition = xrView.orientation.position
+        }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        floorAxes
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.orientation.inverseMatrix
+        , modelTransform = Mat4.identity
+        , cameraPosition = xrView.orientation.position
+        }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
         model.biplaneMesh
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform =
-            Mat4.mul (List.head inputs |> Maybe.andThen .orientation |> Maybe.map .matrix |> Maybe.withDefault Mat4.identity) worldScale
+            Mat4.mul a worldScale
 
         --Mat4.mul (Frame3d.toMat4 model.plane) worldScale
         , cameraPosition = xrView.orientation.position
@@ -665,14 +721,24 @@ floorAxes : Mesh Vertex
 floorAxes =
     let
         thickness =
-            0.05
+            0.01
+
+        length =
+            0.3
     in
-    [ { position = Vec3.vec3 1 -thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 1 thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
+    [ -- X axis
+      { position = Vec3.vec3 length -thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 length thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
     , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
     , { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 -thickness 1 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 thickness 1 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
+    , -- Y axis
+      { position = Vec3.vec3 -thickness length 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 thickness length 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    , -- Z axis
+      { position = Vec3.vec3 -thickness 0 length, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
+    , { position = Vec3.vec3 thickness 0 length, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
     , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
     , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
     ]

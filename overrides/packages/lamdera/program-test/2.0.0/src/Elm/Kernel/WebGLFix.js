@@ -901,7 +901,7 @@ function _WebGLFix_requestXrStart(options) {
 
                             let xrStartData = { __$boundary : __Maybe_Nothing };
 
-                            xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, p.z); })));
+                            xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, -p.z); })));
                             callback(__Scheduler_succeed(xrStartData));
 
                         })
@@ -1013,7 +1013,7 @@ function _WebGLFix_renderXrFrame(entities) {
 
 
                     if (xrReferenceSpace.boundsGeometry) {
-                         poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, p.z); })));
+                         poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, -p.z); })));
                     }
 
                     let glLayer = frame.session.renderState.baseLayer;

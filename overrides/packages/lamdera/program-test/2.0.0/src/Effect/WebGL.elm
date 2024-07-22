@@ -439,7 +439,7 @@ zUpMat =
         , m41 = 0
         , m12 = 0
         , m22 = 0
-        , m32 = 1
+        , m32 = -1
         , m42 = 0
         , m13 = 0
         , m23 = 1
@@ -464,7 +464,7 @@ convertMatToZUp mat4 =
 
 convertVecToZUp : Vec3 -> Vec3
 convertVecToZUp vec3 =
-    Vec3.vec3 (Vec3.getX vec3) (Vec3.getZ vec3) (Vec3.getY vec3)
+    Vec3.vec3 (Vec3.getX vec3) -(Vec3.getZ vec3) (Vec3.getY vec3)
 
 
 orientationToZUp : XrOrientation -> XrOrientation
@@ -558,10 +558,33 @@ inputFromInternal input =
     , orientation =
         Maybe.map
             (\a ->
+                let
+                    m =
+                        Mat4.toRecord a.matrix
+                in
                 { position = convertVecToZUp a.position
                 , direction = convertVecToZUp a.direction
-                , matrix = Mat4.mul zUpMatInverse a.matrix
-                , inverseMatrix = Mat4.mul zUpMatInverse a.inverseMatrix
+                , matrix =
+                    --Mat4.fromRecord
+                    --    { m11 = m.m11
+                    --    , m21 = m.m31 --flip
+                    --    , m31 = m.m21 --flip
+                    --    , m41 = m.m41
+                    --    , m12 = m.m12
+                    --    , m22 = m.m32 --flip
+                    --    , m32 = m.m22 --flip
+                    --    , m42 = m.m42
+                    --    , m13 = m.m13
+                    --    , m23 = m.m33 --flip
+                    --    , m33 = m.m23 --flip
+                    --    , m43 = m.m43
+                    --    , m14 = m.m14
+                    --    , m24 = m.m34 --flip
+                    --    , m34 = m.m24 --flip
+                    --    , m44 = m.m44
+                    --    }
+                    Mat4.mul zUpMatInverse a.matrix
+                , inverseMatrix = Mat4.identity --Mat4.mul zUpMatInverse a.inverseMatrix
                 }
             )
             input.orientation
