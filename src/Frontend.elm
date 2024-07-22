@@ -319,7 +319,7 @@ vrUpdate pose model =
         , bullets =
             if isShooting then
                 { position = Frame3d.originPoint newFrame
-                , velocity = Vector3d.withLength bulletSpeed (Frame3d.zDirection newFrame)
+                , velocity = Vector3d.withLength bulletSpeed (Frame3d.yDirection newFrame)
                 , firedAt = pose.time
                 }
                     :: List.filterMap (updateBullet elapsedTime pose.time) model.bullets
@@ -372,7 +372,7 @@ updateBullet elapsedTime currentTime bullet =
 
 bulletSpeed : Quantity Float (Rate Meters Seconds)
 bulletSpeed =
-    Quantity.rate (Length.meters 5) Duration.second
+    Quantity.rate (Length.meters 50) Duration.second
 
 
 mat4ToFrame3d : Mat4 -> Frame3d u c d
@@ -494,12 +494,113 @@ view model =
     }
 
 
-worldScale =
+worldScaleMat =
     Mat4.makeScale3 0.01 0.01 0.01
+
+
+worldScale =
+    0.1
+
+
+bulletColor =
+    Vec3.vec3 1 1 0.5
+
+
+bulletsMesh : List Bullet -> Mesh Vertex
+bulletsMesh bullets =
+    let
+        vertices =
+            List.foldl
+                (\bullet quads ->
+                    case Vector3d.direction bullet.velocity of
+                        Just dir ->
+                            let
+                                vDir : Vector3d Meters World
+                                vDir =
+                                    Vector3d.for (Duration.milliseconds 16) bullet.velocity
+
+                                ( d1, d2 ) =
+                                    Direction3d.perpendicularBasis dir
+
+                                v1 =
+                                    Direction3d.toVector d1 |> Vector3d.scaleBy 0.005 |> Vector3d.unwrap |> Vector3d.unsafe
+
+                                v2 =
+                                    Direction3d.toVector d2 |> Vector3d.scaleBy 0.005 |> Vector3d.unwrap |> Vector3d.unsafe
+
+                                p1 =
+                                    Point3d.translateBy v1 bullet.position
+
+                                p2 =
+                                    Point3d.translateBy v2 bullet.position
+
+                                p3 =
+                                    Point3d.translateBy (Vector3d.reverse v1) bullet.position
+
+                                p4 =
+                                    Point3d.translateBy (Vector3d.reverse v2) bullet.position
+                            in
+                            [ -- Bullet trail tail
+                              { position = Point3d.toVec3 p1, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            , { position = Point3d.toVec3 p2, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            , { position = Point3d.toVec3 p3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            , { position = Point3d.toVec3 p4, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            , -- Bullet trail head
+                              { position = Point3d.translateBy vDir p1 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            , { position = Point3d.translateBy vDir p2 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            , { position = Point3d.translateBy vDir p3 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            , { position = Point3d.translateBy vDir p4 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                            ]
+                                ++ quads
+
+                        Nothing ->
+                            quads
+                )
+                []
+                bullets
+
+        indices2 : List ( Int, Int, Int )
+        indices2 =
+            List.foldl
+                (\_ { i, indices } ->
+                    { i = i + 8
+                    , indices =
+                        [ --tail quad
+                          ( i, i + 1, i + 2 )
+                        , ( i + 2, i + 3, i )
+                        , -- head quad
+                          ( i + 4, i + 5, i + 6 )
+                        , ( i + 6, i + 7, i + 4 )
+                        , -- side 1
+                          ( i, i + 4, i + 1 )
+                        , ( i + 1, i + 5, i + 4 )
+                        , -- side 2
+                          ( i + 1, i + 5, i + 6 )
+                        , ( i + 1, i + 6, i + 2 )
+                        , -- side 3
+                          ( i + 2, i + 6, i + 3 )
+                        , ( i + 6, i + 7, i + 3 )
+                        , -- side 4
+                          ( i + 7, i + 3, i + 4 )
+                        , ( i + 4, i, i + 3 )
+                        ]
+                            ++ indices
+                    }
+                )
+                { i = 0, indices = [] }
+                bullets
+                |> .indices
+    in
+    WebGL.indexedTriangles vertices indices2
 
 
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model { time, xrView, inputs } =
+    let
+        bullets : Mesh Vertex
+        bullets =
+            bulletsMesh model.bullets
+    in
     [ --WebGL.entity
       --    vertexShader
       --    fragmentShader
@@ -553,10 +654,11 @@ entities model { time, xrView, inputs } =
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform =
-            List.head inputs
-                |> Maybe.andThen .orientation
-                |> Maybe.map .matrix
-                |> Maybe.withDefault Mat4.identity
+            --List.head inputs
+            --    |> Maybe.andThen .orientation
+            --    |> Maybe.map .matrix
+            --    |> Maybe.withDefault Mat4.identity
+            Frame3d.toMat4 model.plane
         , cameraPosition = xrView.orientation.position
         }
     , WebGL.entity
@@ -575,36 +677,24 @@ entities model { time, xrView, inputs } =
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform =
-            List.head inputs
-                |> Maybe.andThen .orientation
-                |> Maybe.map .matrix
-                |> Maybe.withDefault Mat4.identity
-                |> (\a -> Mat4.mul a worldScale)
-
-        --Mat4.mul (Frame3d.toMat4 model.plane) worldScale
+            --List.head inputs
+            --    |> Maybe.andThen .orientation
+            --    |> Maybe.map .matrix
+            --    |> Maybe.withDefault Mat4.identity
+            --    |> (\a -> Mat4.mul a worldScale)
+            Mat4.mul (Frame3d.toMat4 model.plane) worldScaleMat
+        , cameraPosition = xrView.orientation.position
+        }
+    , WebGL.entity
+        vertexShader
+        fragmentShader
+        bullets
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.orientation.inverseMatrix
+        , modelTransform = Mat4.identity
         , cameraPosition = xrView.orientation.position
         }
     ]
-        ++ List.map
-            (\bullet ->
-                let
-                    v1 =
-                        bullet.position
-
-                    v2 =
-                        bullet.position
-                in
-                WebGL.entity
-                    vertexShader
-                    fragmentShader
-                    (sphere bullet.position 4)
-                    { perspective = xrView.projectionMatrix
-                    , viewMatrix = xrView.orientation.inverseMatrix
-                    , modelTransform = Mat4.identity
-                    , cameraPosition = xrView.orientation.position
-                    }
-            )
-            model.bullets
         ++ (case model.cloudTexture of
                 LoadedTexture texture ->
                     [ WebGL.entityWith
@@ -751,7 +841,7 @@ sphere : Point3d u c -> Int -> Mesh Vertex
 sphere position detail =
     let
         radius =
-            0.5
+            0.01
 
         uDetail =
             detail * 2
