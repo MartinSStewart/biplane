@@ -18,6 +18,7 @@ import Effect.WebGL.Settings exposing (Setting)
 import Effect.WebGL.Texture exposing (Texture)
 import Frame3d exposing (Frame3d)
 import Geometry.Interop.LinearAlgebra.Frame3d as Frame3d
+import Geometry.Interop.LinearAlgebra.Point2d as Point2d
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
 import Html
@@ -31,6 +32,7 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Obj.Decode
+import Point2d
 import Point3d exposing (Point3d)
 import Quantity exposing (Product, Quantity, Rate)
 import TriangularMesh
@@ -67,6 +69,7 @@ init url key =
       , startTime = Time.millisToPosix 0
       , isInVr = False
       , boundaryMesh = WebGL.triangleFan []
+      , boundaryCenter = Point2d.origin
       , previousBoundary = Nothing
       , biplaneMesh = WebGL.triangleFan []
       , islandMesh = WebGL.triangleFan []
@@ -75,6 +78,7 @@ init url key =
       , holdingHand = Just 1
       , bullets = []
       , lastShot = Time.millisToPosix 0
+      , lagWarning = Time.millisToPosix 0
       }
     , Command.batch
         [ Effect.Http.get
@@ -98,10 +102,6 @@ init url key =
             |> Task.attempt GotCloudTexture
         ]
     )
-
-
-cloudTextureSize =
-    512
 
 
 
@@ -170,6 +170,13 @@ update msg model =
                         | isInVr = True
                         , previousBoundary = data.boundary
                         , boundaryMesh = getBoundaryMesh data.boundary
+                        , boundaryCenter =
+                            case data.boundary of
+                                Just (first :: rest) ->
+                                    Point2d.centroidOf Point2d.fromVec2 first rest
+
+                                _ ->
+                                    model.boundaryCenter
                       }
                     , WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
                     )
@@ -215,6 +222,7 @@ update msg model =
                                             { position = Point3d.toVec3 point.position
                                             , color = Vec3.vec3 0.8 0.8 0
                                             , normal = Vector3d.toVec3 point.normal
+                                            , shininess = 20
                                             }
                                         )
                                 )
@@ -239,6 +247,7 @@ update msg model =
                                             { position = Point3d.toVec3 point.position
                                             , color = Vec3.vec3 0.6 0.6 0.2
                                             , normal = Vector3d.toVec3 point.normal
+                                            , shininess = 2
                                             }
                                         )
                                 )
@@ -306,16 +315,30 @@ vrUpdate pose model =
 
         elapsedTime =
             Duration.from model.lastVrUpdate pose.time
+
+        sameBoundary =
+            model.previousBoundary == pose.boundary
     in
     ( { model
         | time = pose.time
         , previousBoundary = pose.boundary
         , boundaryMesh =
-            if model.previousBoundary == pose.boundary then
+            if sameBoundary then
                 model.boundaryMesh
 
             else
                 getBoundaryMesh pose.boundary
+        , boundaryCenter =
+            if sameBoundary then
+                model.boundaryCenter
+
+            else
+                case pose.boundary of
+                    Just (first :: rest) ->
+                        Point2d.centroidOf Point2d.fromVec2 first rest
+
+                    _ ->
+                        model.boundaryCenter
         , bullets =
             if isShooting then
                 { position = Frame3d.originPoint newFrame
@@ -334,9 +357,16 @@ vrUpdate pose model =
                 model.lastShot
         , plane = newFrame
         , lastVrUpdate = pose.time
+        , lagWarning =
+            if elapsedTime |> Quantity.greaterThan (Duration.milliseconds 15) then
+                pose.time
+
+            else
+                model.lagWarning
       }
     , Command.batch
-        [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
+        [ WebGL.renderXrFrame (entities model)
+            |> Task.attempt RenderedXrFrame
         , if
             List.any
                 (\input ->
@@ -434,10 +464,26 @@ getBoundaryMesh maybeBoundary =
                     { index = state.index + 1
                     , first = v
                     , quads =
-                        { position = Vec3.vec3 x2 y2 0, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
-                            :: { position = Vec3.vec3 x1 y1 0, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
-                            :: { position = Vec3.vec3 x1 y1 heightOffset, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
-                            :: { position = Vec3.vec3 x2 y2 heightOffset, color = Vec3.vec3 t (1 - t) (0.5 + t / 2), normal = Vec3.vec3 0 1 0 }
+                        { position = Vec3.vec3 x2 y2 0
+                        , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                        , normal = Vec3.vec3 0 1 0
+                        , shininess = 20
+                        }
+                            :: { position = Vec3.vec3 x1 y1 0
+                               , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                               , normal = Vec3.vec3 0 1 0
+                               , shininess = 20
+                               }
+                            :: { position = Vec3.vec3 x1 y1 heightOffset
+                               , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                               , normal = Vec3.vec3 0 1 0
+                               , shininess = 20
+                               }
+                            :: { position = Vec3.vec3 x2 y2 heightOffset
+                               , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                               , normal = Vec3.vec3 0 1 0
+                               , shininess = 20
+                               }
                             :: state.quads
                     }
                 )
@@ -514,6 +560,10 @@ bulletColor =
     Vec3.vec3 1 1 0.5
 
 
+zNormal =
+    Vec3.vec3 0 0 1
+
+
 bulletsMesh : List Bullet -> Mesh Vertex
 bulletsMesh bullets =
     let
@@ -549,15 +599,15 @@ bulletsMesh bullets =
                                     Point3d.translateBy (Vector3d.reverse v2) bullet.position
                             in
                             [ -- Bullet trail tail
-                              { position = Point3d.toVec3 p1, color = bulletColor, normal = Vec3.vec3 0 0 1 }
-                            , { position = Point3d.toVec3 p2, color = bulletColor, normal = Vec3.vec3 0 0 1 }
-                            , { position = Point3d.toVec3 p3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
-                            , { position = Point3d.toVec3 p4, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                              { position = Point3d.toVec3 p1, color = bulletColor, normal = zNormal, shininess = 20 }
+                            , { position = Point3d.toVec3 p2, color = bulletColor, normal = zNormal, shininess = 20 }
+                            , { position = Point3d.toVec3 p3, color = bulletColor, normal = zNormal, shininess = 20 }
+                            , { position = Point3d.toVec3 p4, color = bulletColor, normal = zNormal, shininess = 20 }
                             , -- Bullet trail head
-                              { position = Point3d.translateBy vDir p1 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
-                            , { position = Point3d.translateBy vDir p2 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
-                            , { position = Point3d.translateBy vDir p3 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
-                            , { position = Point3d.translateBy vDir p4 |> Point3d.toVec3, color = bulletColor, normal = Vec3.vec3 0 0 1 }
+                              { position = Point3d.translateBy vDir p1 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
+                            , { position = Point3d.translateBy vDir p2 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
+                            , { position = Point3d.translateBy vDir p3 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
+                            , { position = Point3d.translateBy vDir p4 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
                             ]
                                 ++ quads
 
@@ -603,141 +653,124 @@ bulletsMesh bullets =
 
 
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
-entities model { time, xrView, inputs } =
+entities model =
     let
-        bullets : Mesh Vertex
         bullets =
             bulletsMesh model.bullets
+
+        islandPos =
+            Point2d.unwrap model.boundaryCenter
     in
-    [ --WebGL.entity
-      --    vertexShader
-      --    fragmentShader
-      --    floorAxes
-      --    { perspective = xrView.projectionMatrix
-      --    , viewMatrix = xrView.orientation.inverseMatrix
-      --    , modelTransform = Mat4.identity
-      --    , cameraPosition = xrView.orientation.position
-      --    }
-      WebGL.entity
-        vertexShader
-        fragmentShader
-        model.boundaryMesh
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
-        , cameraPosition = xrView.orientation.position
-        }
+    \{ time, xrView, inputs } ->
+        [ --WebGL.entity
+          --    vertexShader
+          --    fragmentShader
+          --    floorAxes
+          --    { perspective = xrView.projectionMatrix
+          --    , viewMatrix = xrView.orientation.inverseMatrix
+          --    , modelTransform = Mat4.identity
+          --    , cameraPosition = xrView.orientation.position
+          --    }
+          WebGL.entity
+            vertexShader
+            fragmentShader
+            model.boundaryMesh
+            { perspective = xrView.projectionMatrix
+            , viewMatrix = xrView.orientation.inverseMatrix
+            , modelTransform = Mat4.identity
+            , cameraPosition = xrView.orientation.position
+            }
+        , WebGL.entity
+            vertexShader
+            fragmentShader
+            model.islandMesh
+            { perspective = xrView.projectionMatrix
+            , viewMatrix = xrView.orientation.inverseMatrix
+            , modelTransform = Mat4.mul (Mat4.makeTranslate3 islandPos.x islandPos.y 0) worldScaleMat
+            , cameraPosition = xrView.orientation.position
+            }
+        , WebGL.entity
+            vertexShader
+            fragmentShader
+            waterMesh
+            { perspective = xrView.projectionMatrix
+            , viewMatrix = xrView.orientation.inverseMatrix
+            , modelTransform = Mat4.identity
+            , cameraPosition = xrView.orientation.position
+            }
+        , WebGL.entity
+            vertexShader
+            fragmentShader
+            sunMesh
+            { perspective = xrView.projectionMatrix
+            , viewMatrix = xrView.orientation.inverseMatrix
+            , modelTransform = Mat4.identity
+            , cameraPosition = xrView.orientation.position
+            }
 
-    --, WebGL.entity
-    --    vertexShader
-    --    fragmentShader
-    --    model.islandMesh
-    --    { perspective = xrView.projectionMatrix
-    --    , viewMatrix = xrView.orientation.inverseMatrix
-    --    , modelTransform = worldScale
-    --    , cameraPosition = xrView.orientation.position
-    --    }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        waterMesh
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
-        , cameraPosition = xrView.orientation.position
-        }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        sunMesh
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
-        , cameraPosition = xrView.orientation.position
-        }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        floorAxes
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform =
-            --List.head inputs
-            --    |> Maybe.andThen .orientation
-            --    |> Maybe.map .matrix
-            --    |> Maybe.withDefault Mat4.identity
-            Frame3d.toMat4 model.plane
-        , cameraPosition = xrView.orientation.position
-        }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        floorAxes
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
-        , cameraPosition = xrView.orientation.position
-        }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        model.biplaneMesh
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform =
-            --List.head inputs
-            --    |> Maybe.andThen .orientation
-            --    |> Maybe.map .matrix
-            --    |> Maybe.withDefault Mat4.identity
-            --    |> (\a -> Mat4.mul a worldScale)
-            Mat4.mul (Frame3d.toMat4 model.plane) worldScaleMat
-        , cameraPosition = xrView.orientation.position
-        }
-    , WebGL.entity
-        vertexShader
-        fragmentShader
-        bullets
-        { perspective = xrView.projectionMatrix
-        , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = Mat4.identity
-        , cameraPosition = xrView.orientation.position
-        }
-    ]
-        ++ (if Duration.from model.lastVrUpdate time |> Quantity.greaterThan (Duration.milliseconds 100) then
-                [ WebGL.entity
-                    vertexShader
-                    fragmentShader
-                    sphere1
-                    { perspective = xrView.projectionMatrix
-                    , viewMatrix = Mat4.identity
-                    , modelTransform = Mat4.identity
-                    , cameraPosition = xrView.orientation.position
-                    }
-                ]
-
-            else
-                []
-           )
-        ++ (case model.cloudTexture of
-                LoadedTexture texture ->
-                    [ WebGL.entityWith
-                        [ blend, DepthTest.default ]
-                        cloudVertexShader
-                        cloudFragmentShader
-                        clouds
+        --, WebGL.entity
+        --    vertexShader
+        --    fragmentShader
+        --    floorAxes
+        --    { perspective = xrView.projectionMatrix
+        --    , viewMatrix = xrView.orientation.inverseMatrix
+        --    , modelTransform = Mat4.identity
+        --    , cameraPosition = xrView.orientation.position
+        --    }
+        , WebGL.entity
+            vertexShader
+            fragmentShader
+            model.biplaneMesh
+            { perspective = xrView.projectionMatrix
+            , viewMatrix = xrView.orientation.inverseMatrix
+            , modelTransform = Mat4.mul (Frame3d.toMat4 model.plane) worldScaleMat
+            , cameraPosition = xrView.orientation.position
+            }
+        , WebGL.entity
+            vertexShader
+            fragmentShader
+            bullets
+            { perspective = xrView.projectionMatrix
+            , viewMatrix = xrView.orientation.inverseMatrix
+            , modelTransform = Mat4.identity
+            , cameraPosition = xrView.orientation.position
+            }
+        ]
+            ++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
+                    [ WebGL.entity
+                        vertexShader
+                        fragmentShader
+                        sphere1
                         { perspective = xrView.projectionMatrix
-                        , viewMatrix = xrView.orientation.inverseMatrix
-                        , modelTransform = Mat4.makeTranslate3 0 0 1 |> Mat4.scale3 1 1 0.2
-                        , texture = texture
+                        , viewMatrix = Mat4.identity
+                        , modelTransform = Mat4.identity
+                        , cameraPosition = xrView.orientation.position
                         }
                     ]
 
-                LoadingTexture ->
+                else
                     []
+               )
+            ++ (case model.cloudTexture of
+                    LoadedTexture texture ->
+                        [ WebGL.entityWith
+                            [ blend, DepthTest.default ]
+                            cloudVertexShader
+                            cloudFragmentShader
+                            clouds
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.orientation.inverseMatrix
+                            , modelTransform = Mat4.makeTranslate3 0 0 1 |> Mat4.scale3 1 1 0.2
+                            , texture = texture
+                            }
+                        ]
 
-                TextureError _ ->
-                    []
-           )
+                    LoadingTexture ->
+                        []
+
+                    TextureError _ ->
+                        []
+               )
 
 
 blend : Setting
@@ -762,10 +795,10 @@ sunMesh =
         color =
             Vec3.vec3 1 1 1
     in
-    [ { position = Vec3.vec3 size -size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 size size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 -size size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 -size -size 0 |> Vec3.add sunPosition, color = color, normal = Vec3.vec3 0 0 1 }
+    [ { position = Vec3.vec3 size -size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 size size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 -size size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 -size -size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
     ]
         |> quadsToMesh
 
@@ -812,20 +845,20 @@ floorAxes =
             0.3
     in
     [ -- X axis
-      { position = Vec3.vec3 length -thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 length thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 1 0 0, normal = Vec3.vec3 0 0 1 }
+      { position = Vec3.vec3 length -thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 length thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
     , -- Y axis
-      { position = Vec3.vec3 -thickness length 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 thickness length 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+      { position = Vec3.vec3 -thickness length 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness length 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
     , -- Z axis
-      { position = Vec3.vec3 -thickness 0 length, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 thickness 0 length, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = Vec3.vec3 0 0 1 }
+      { position = Vec3.vec3 -thickness 0 length, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness 0 length, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
     ]
         |> quadsToMesh
 
@@ -835,10 +868,10 @@ verticalLine =
         thickness =
             0.02
     in
-    [ { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 0 thickness 10, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 0 -thickness 10, color = Vec3.vec3 0 1 0, normal = Vec3.vec3 0 0 1 }
+    [ { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 0 1 0, normal = zNormal }
+    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 0 1 0, normal = zNormal }
+    , { position = Vec3.vec3 0 thickness 10, color = Vec3.vec3 0 1 0, normal = zNormal }
+    , { position = Vec3.vec3 0 -thickness 10, color = Vec3.vec3 0 1 0, normal = zNormal }
     ]
         |> quadsToMesh
 
@@ -847,26 +880,26 @@ waterMesh : Mesh Vertex
 waterMesh =
     let
         size =
-            2
+            200
 
         color =
             Vec3.vec3 0.2 0.3 1
     in
-    [ { position = Vec3.vec3 size -size 0, color = color, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 size size 0, color = color, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 -size size 0, color = color, normal = Vec3.vec3 0 0 1 }
-    , { position = Vec3.vec3 -size -size 0, color = color, normal = Vec3.vec3 0 0 1 }
+    [ { position = Vec3.vec3 size -size 0, color = color, normal = zNormal, shininess = 200 }
+    , { position = Vec3.vec3 size size 0, color = color, normal = zNormal, shininess = 200 }
+    , { position = Vec3.vec3 -size size 0, color = color, normal = zNormal, shininess = 200 }
+    , { position = Vec3.vec3 -size -size 0, color = color, normal = zNormal, shininess = 200 }
     ]
         |> quadsToMesh
 
 
 sphere1 : Mesh Vertex
 sphere1 =
-    sphere (Vec3.vec3 1 0 0) (Point3d.meters 0 0 -1.2) 8
+    sphere 0 (Vec3.vec3 1 0 0) (Point3d.meters 0 0 -1.2) 8
 
 
-sphere : Vec3 -> Point3d u c -> Int -> Mesh Vertex
-sphere color position detail =
+sphere : Float -> Vec3 -> Point3d u c -> Int -> Mesh Vertex
+sphere shininess color position detail =
     let
         radius =
             0.1
@@ -900,6 +933,7 @@ sphere color position detail =
                     { position = Point3d.translateBy (Vector3d.scaleBy radius point) position |> Point3d.toVec3
                     , normal = Vector3d.toVec3 point
                     , color = color
+                    , shininess = shininess
                     }
                 )
     in
@@ -919,7 +953,7 @@ type alias CloudUniforms =
 
 
 type alias Varying =
-    { vColor : Vec3, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3 }
+    { vColor : Vec3, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3, vShininess : Float }
 
 
 vertexShader : Shader Vertex Uniforms Varying
@@ -928,6 +962,7 @@ vertexShader =
 attribute vec3 position;
 attribute vec3 color;
 attribute vec3 normal;
+attribute float shininess;
 
 uniform mat4 modelTransform;
 uniform mat4 viewMatrix;
@@ -938,6 +973,7 @@ varying vec3 vColor;
 varying vec3 vNormal;
 varying vec3 vPosition;
 varying vec3 vCameraPosition;
+varying float vShininess;
 
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
@@ -945,6 +981,7 @@ void main(void) {
     vPosition = (modelTransform * vec4(position, 1.0)).xyz;
     vNormal = normalize((modelTransform * vec4(normal, 0.0)).xyz);
     vCameraPosition = cameraPosition;
+    vShininess = shininess;
 }
     |]
 
@@ -957,6 +994,7 @@ varying vec3 vColor;
 varying vec3 vNormal;
 varying vec3 vPosition;
 varying vec3 vCameraPosition;
+varying float vShininess;
 
 // https://www.tomdalling.com/blog/modern-opengl/08-even-more-lighting-directional-lights-spotlights-multiple-lights/
 vec3 ApplyLight(
@@ -966,9 +1004,9 @@ vec3 ApplyLight(
     vec3 surfaceColor,
     vec3 normal,
     vec3 surfacePos,
-    vec3 surfaceToCamera)
+    vec3 surfaceToCamera,
+    float materialShininess)
 {
-    float materialShininess = 20.0;
     vec3 materialSpecularColor = vec3(0.7, 0.7, 0.7);
 
     vec3 surfaceToLight = normalize(lightPosition);
@@ -995,12 +1033,13 @@ void main () {
     vec3 color2 =
         ApplyLight(
             vec3(0.0, 0.0, 1.0),
-            vec3(1.0, 1.0, 1.0),
+            vec3(0.5, 0.5, 0.5),
             0.5,
             vColor.rgb,
             normalize(vNormal),
             vPosition,
-            normalize(vCameraPosition - vPosition));
+            normalize(vCameraPosition - vPosition),
+            vShininess);
 
     float gamma = 2.2;
 

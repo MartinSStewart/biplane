@@ -12,6 +12,7 @@ import Length exposing (Meters)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
 import Obj.Decode exposing (ObjCoordinates)
+import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Rate, Unitless)
 import TriangularMesh exposing (TriangularMesh)
@@ -34,6 +35,8 @@ type alias FrontendModel =
     , lastShot : Time.Posix
     , holdingHand : Maybe Int
     , plane : Frame3d Meters World { defines : PlaneLocal }
+    , lagWarning : Time.Posix
+    , boundaryCenter : Point2d Meters World
     }
 
 
@@ -62,6 +65,7 @@ type alias Vertex =
     { position : Vec3
     , color : Vec3
     , normal : Vec3
+    , shininess : Float
     }
 
 

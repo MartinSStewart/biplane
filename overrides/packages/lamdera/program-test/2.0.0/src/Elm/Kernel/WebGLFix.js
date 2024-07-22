@@ -996,11 +996,6 @@ function _WebGLFix_renderXrFrame(entities) {
 
                 xrSession.removeEventListener('end', notStarted);
 
-                let err = xrGl.getError();
-                if (err) {
-                    console.error(`WebGL error returned: ${err}`);
-                }
-
                 if (pose) {
                     let inputs = getInputSources(xrSession, frame, xrReferenceSpace);
 
