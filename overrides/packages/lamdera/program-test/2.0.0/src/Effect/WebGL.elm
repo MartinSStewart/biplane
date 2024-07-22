@@ -452,6 +452,11 @@ zUpMat =
         }
 
 
+zUpInputMat : Mat4
+zUpInputMat =
+    Mat4.rotate pi (Vec3.vec3 1 0 0) zUpMatInverse
+
+
 zUpMatInverse : Mat4
 zUpMatInverse =
     Mat4.inverseOrthonormal zUpMat
@@ -565,25 +570,7 @@ inputFromInternal input =
                 { position = convertVecToZUp a.position
                 , direction = convertVecToZUp a.direction
                 , matrix =
-                    --Mat4.fromRecord
-                    --    { m11 = m.m11
-                    --    , m21 = m.m31 --flip
-                    --    , m31 = m.m21 --flip
-                    --    , m41 = m.m41
-                    --    , m12 = m.m12
-                    --    , m22 = m.m32 --flip
-                    --    , m32 = m.m22 --flip
-                    --    , m42 = m.m42
-                    --    , m13 = m.m13
-                    --    , m23 = m.m33 --flip
-                    --    , m33 = m.m23 --flip
-                    --    , m43 = m.m43
-                    --    , m14 = m.m14
-                    --    , m24 = m.m34 --flip
-                    --    , m34 = m.m24 --flip
-                    --    , m44 = m.m44
-                    --    }
-                    Mat4.mul zUpMatInverse a.matrix
+                    Mat4.mul (Mat4.mul zUpMatInverse a.matrix) zUpInputMat
                 , inverseMatrix = Mat4.identity --Mat4.mul zUpMatInverse a.inverseMatrix
                 }
             )

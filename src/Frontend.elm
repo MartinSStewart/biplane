@@ -498,30 +498,6 @@ worldScale =
     Mat4.makeScale3 0.01 0.01 0.01
 
 
-zUpMat : Mat4
-zUpMat =
-    Mat4.fromRecord
-        { m11 = 1
-        , m21 = 0
-        , m31 = 0
-        , m41 = 0
-        , m12 = 0
-        , m22 = 0
-        , m32 = -1
-        , m42 = 0
-        , m13 = 0
-        , m23 = 1
-        , m33 = 0
-        , m43 = 0
-        , m14 = 0
-        , m24 = 0
-        , m34 = 0
-        , m44 = 1
-        }
-        |> Mat4.inverseOrthonormal
-        |> Mat4.rotate pi (Vec3.vec3 1 0 0)
-
-
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model { time, xrView, inputs } =
     let
@@ -530,7 +506,6 @@ entities model { time, xrView, inputs } =
                 |> Maybe.andThen .orientation
                 |> Maybe.map .matrix
                 |> Maybe.withDefault Mat4.identity
-                |> (\b -> Mat4.mul b zUpMat)
 
         --|> mat4ToFrame3d
         --|> Frame3d.rotateAroundOwn Frame3d.xAxis (Angle.turns 0.25)
