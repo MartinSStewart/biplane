@@ -454,7 +454,12 @@ zUpMat =
 
 zUpInputMat : Mat4
 zUpInputMat =
-    Mat4.makeRotate pi (Vec3.vec3 1 0 0)
+    Mat4.rotate pi (Vec3.vec3 1 0 0) zUpMatInverse
+
+
+zUpMatInverse : Mat4
+zUpMatInverse =
+    Mat4.inverseOrthonormal zUpMat
 
 
 convertMatToZUp : Mat4 -> Mat4
@@ -558,10 +563,15 @@ inputFromInternal input =
     , orientation =
         Maybe.map
             (\a ->
+                let
+                    m =
+                        Mat4.toRecord a.matrix
+                in
                 { position = convertVecToZUp a.position
                 , direction = convertVecToZUp a.direction
-                , matrix = Mat4.mul a.matrix zUpInputMat
-                , inverseMatrix = Mat4.identity
+                , matrix =
+                    Mat4.mul (Mat4.mul zUpMatInverse a.matrix) zUpInputMat
+                , inverseMatrix = Mat4.identity --Mat4.mul zUpMatInverse a.inverseMatrix
                 }
             )
             input.orientation
