@@ -500,17 +500,6 @@ worldScale =
 
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model { time, xrView, inputs } =
-    let
-        a =
-            List.head inputs
-                |> Maybe.andThen .orientation
-                |> Maybe.map .matrix
-                |> Maybe.withDefault Mat4.identity
-
-        --|> mat4ToFrame3d
-        --|> Frame3d.rotateAroundOwn Frame3d.xAxis (Angle.turns 0.25)
-        --|> Frame3d.toMat4
-    in
     [ --WebGL.entity
       --    vertexShader
       --    fragmentShader
@@ -563,7 +552,11 @@ entities model { time, xrView, inputs } =
         floorAxes
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
-        , modelTransform = a
+        , modelTransform =
+            List.head inputs
+                |> Maybe.andThen .orientation
+                |> Maybe.map .matrix
+                |> Maybe.withDefault Mat4.identity
         , cameraPosition = xrView.orientation.position
         }
     , WebGL.entity
@@ -582,7 +575,11 @@ entities model { time, xrView, inputs } =
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.orientation.inverseMatrix
         , modelTransform =
-            Mat4.mul a worldScale
+            List.head inputs
+                |> Maybe.andThen .orientation
+                |> Maybe.map .matrix
+                |> Maybe.withDefault Mat4.identity
+                |> (\a -> Mat4.mul a worldScale)
 
         --Mat4.mul (Frame3d.toMat4 model.plane) worldScale
         , cameraPosition = xrView.orientation.position
