@@ -32,7 +32,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Obj.Decode
 import Point3d exposing (Point3d)
-import Quantity exposing (Quantity, Rate)
+import Quantity exposing (Product, Quantity, Rate)
 import TriangularMesh
 import Types exposing (..)
 import Url
@@ -362,7 +362,7 @@ updateBullet elapsedTime currentTime bullet =
     if Duration.from bullet.firedAt currentTime |> Quantity.lessThan (Duration.seconds 2) then
         Just
             { position = Point3d.translateBy (Vector3d.for elapsedTime bullet.velocity) bullet.position
-            , velocity = bullet.velocity
+            , velocity = Vector3d.for elapsedTime gravity |> Vector3d.plus bullet.velocity
             , firedAt = bullet.firedAt
             }
 
@@ -370,9 +370,17 @@ updateBullet elapsedTime currentTime bullet =
         Nothing
 
 
+gravity : Vector3d (Rate (Rate Meters Seconds) Seconds) World
+gravity =
+    Vector3d.xyz
+        Quantity.zero
+        Quantity.zero
+        (Quantity.rate (Quantity.rate (Length.meters -3) Duration.second) Duration.second)
+
+
 bulletSpeed : Quantity Float (Rate Meters Seconds)
 bulletSpeed =
-    Quantity.rate (Length.meters 50) Duration.second
+    Quantity.rate (Length.meters 15) Duration.second
 
 
 mat4ToFrame3d : Mat4 -> Frame3d u c d
@@ -517,16 +525,16 @@ bulletsMesh bullets =
                             let
                                 vDir : Vector3d Meters World
                                 vDir =
-                                    Vector3d.for (Duration.milliseconds 16) bullet.velocity
+                                    Vector3d.for (Duration.milliseconds 8) bullet.velocity
 
                                 ( d1, d2 ) =
                                     Direction3d.perpendicularBasis dir
 
                                 v1 =
-                                    Direction3d.toVector d1 |> Vector3d.scaleBy 0.005 |> Vector3d.unwrap |> Vector3d.unsafe
+                                    Direction3d.toVector d1 |> Vector3d.scaleBy 0.002 |> Vector3d.unwrap |> Vector3d.unsafe
 
                                 v2 =
-                                    Direction3d.toVector d2 |> Vector3d.scaleBy 0.005 |> Vector3d.unwrap |> Vector3d.unsafe
+                                    Direction3d.toVector d2 |> Vector3d.scaleBy 0.002 |> Vector3d.unwrap |> Vector3d.unsafe
 
                                 p1 =
                                     Point3d.translateBy v1 bullet.position
@@ -695,6 +703,21 @@ entities model { time, xrView, inputs } =
         , cameraPosition = xrView.orientation.position
         }
     ]
+        ++ (if Duration.from model.lastVrUpdate time |> Quantity.greaterThan (Duration.milliseconds 100) then
+                [ WebGL.entity
+                    vertexShader
+                    fragmentShader
+                    sphere1
+                    { perspective = xrView.projectionMatrix
+                    , viewMatrix = Mat4.identity
+                    , modelTransform = Mat4.identity
+                    , cameraPosition = xrView.orientation.position
+                    }
+                ]
+
+            else
+                []
+           )
         ++ (case model.cloudTexture of
                 LoadedTexture texture ->
                     [ WebGL.entityWith
@@ -837,11 +860,16 @@ waterMesh =
         |> quadsToMesh
 
 
-sphere : Point3d u c -> Int -> Mesh Vertex
-sphere position detail =
+sphere1 : Mesh Vertex
+sphere1 =
+    sphere (Vec3.vec3 1 0 0) (Point3d.meters 0 0 -1.2) 8
+
+
+sphere : Vec3 -> Point3d u c -> Int -> Mesh Vertex
+sphere color position detail =
     let
         radius =
-            0.01
+            0.1
 
         uDetail =
             detail * 2
@@ -871,7 +899,7 @@ sphere position detail =
                     in
                     { position = Point3d.translateBy (Vector3d.scaleBy radius point) position |> Point3d.toVec3
                     , normal = Vector3d.toVec3 point
-                    , color = Vec3.vec3 0.7 0.3 0.5
+                    , color = color
                     }
                 )
     in
