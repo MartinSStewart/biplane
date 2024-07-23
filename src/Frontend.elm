@@ -80,7 +80,9 @@ init url key =
       , plane = Frame3d.atOrigin
       , holdingHand = Just 1
       , bullets = []
+      , bulletSplashes = []
       , lastShot = Time.millisToPosix 0
+      , lastShotWasOnLeft = True
       , lagWarning = Time.millisToPosix 0
       }
     , Command.batch
@@ -295,7 +297,7 @@ vrUpdate pose model =
                 Just input ->
                     case List.Extra.getAt 0 input.buttons of
                         Just button ->
-                            if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 200) then
+                            if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 100) then
                                 False
 
                             else
@@ -321,6 +323,37 @@ vrUpdate pose model =
 
         sameBoundary =
             model.previousBoundary == pose.boundary
+
+        ( bullets, splashes ) =
+            List.foldl
+                (\bullet (( bullets2, splashes2 ) as tuple) ->
+                    if Duration.from bullet.firedAt pose.time |> Quantity.lessThan (Duration.seconds 2) then
+                        let
+                            p =
+                                Point3d.translateBy (Vector3d.for elapsedTime bullet.velocity) bullet.position
+                        in
+                        if Point3d.zCoordinate p |> Quantity.lessThanZero then
+                            ( bullets2
+                            , { position = Point2d.xy (Point3d.xCoordinate p) (Point3d.yCoordinate p)
+                              , createdAt = pose.time
+                              }
+                                :: splashes2
+                            )
+
+                        else
+                            ( { position = p
+                              , velocity = Vector3d.for elapsedTime gravity |> Vector3d.plus bullet.velocity
+                              , firedAt = bullet.firedAt
+                              }
+                                :: bullets2
+                            , splashes2
+                            )
+
+                    else
+                        tuple
+                )
+                ( [], model.bulletSplashes )
+                model.bullets
     in
     ( { model
         | time = pose.time
@@ -344,20 +377,43 @@ vrUpdate pose model =
                         model.boundaryCenter
         , bullets =
             if isShooting then
-                { position = Frame3d.originPoint newFrame
+                { position =
+                    Frame3d.translateAlongOwn
+                        Frame3d.xAxis
+                        (Quantity.multiplyBy
+                            (if model.lastShotWasOnLeft then
+                                -worldScale
+
+                             else
+                                worldScale
+                            )
+                            Length.meter
+                        )
+                        newFrame
+                        |> Frame3d.originPoint
                 , velocity = Vector3d.withLength bulletSpeed (Frame3d.yDirection newFrame)
                 , firedAt = pose.time
                 }
-                    :: List.filterMap (updateBullet elapsedTime pose.time) model.bullets
+                    :: bullets
 
             else
-                List.filterMap (updateBullet elapsedTime pose.time) model.bullets
+                bullets
+        , bulletSplashes =
+            List.filter
+                (\splash -> Duration.from splash.createdAt pose.time |> Quantity.lessThan Duration.second)
+                splashes
         , lastShot =
             if isShooting then
                 pose.time
 
             else
                 model.lastShot
+        , lastShotWasOnLeft =
+            if isShooting then
+                not model.lastShotWasOnLeft
+
+            else
+                model.lastShotWasOnLeft
         , plane = newFrame
         , lastVrUpdate = pose.time
         , lagWarning =
@@ -388,19 +444,6 @@ vrUpdate pose model =
             Command.none
         ]
     )
-
-
-updateBullet : Duration -> Time.Posix -> Bullet -> Maybe Bullet
-updateBullet elapsedTime currentTime bullet =
-    if Duration.from bullet.firedAt currentTime |> Quantity.lessThan (Duration.seconds 2) then
-        Just
-            { position = Point3d.translateBy (Vector3d.for elapsedTime bullet.velocity) bullet.position
-            , velocity = Vector3d.for elapsedTime gravity |> Vector3d.plus bullet.velocity
-            , firedAt = bullet.firedAt
-            }
-
-    else
-        Nothing
 
 
 gravity : Vector3d (Rate (Rate Meters Seconds) Seconds) World
@@ -537,16 +580,16 @@ view model =
     in
     { title = "Biplane!"
     , body =
-        [ Html.div
-            [ Html.Attributes.style "font-size" "30px", Html.Attributes.style "font-family" "sans-serif" ]
-            [ if model.isInVr then
-                Html.text "Currently in VR "
+        [ if model.isInVr then
+            Html.text "Currently in VR "
 
-              else
-                Html.text "Not in VR "
-            , Html.button [ Html.Events.onClick PressedEnterVr, Html.Attributes.style "font-size" "30px" ] [ Html.text "Enter VR" ]
-            , " App started " ++ String.fromInt (round (Duration.inSeconds elapsed)) ++ " seconds ago" |> Html.text
-            ]
+          else
+            Html.div
+                [ Html.Attributes.style "font-size" "30px", Html.Attributes.style "font-family" "sans-serif" ]
+                [ Html.text "Not in VR "
+                , Html.button [ Html.Events.onClick PressedEnterVr, Html.Attributes.style "font-size" "30px" ] [ Html.text "Enter VR" ]
+                , " App started " ++ String.fromInt (round (Duration.inSeconds elapsed)) ++ " seconds ago" |> Html.text
+                ]
         ]
     }
 
@@ -739,21 +782,38 @@ entities model =
             , cameraPosition = xrView.orientation.position
             }
         ]
-            ++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
-                    [ WebGL.entity
+            ++ List.map
+                (\splash ->
+                    let
+                        splashPos =
+                            Point2d.toMeters splash.position
+                    in
+                    WebGL.entity
                         vertexShader
                         fragmentShader
-                        sphere1
+                        splashSphere
                         { perspective = xrView.projectionMatrix
-                        , viewMatrix = Mat4.identity
-                        , modelTransform = Mat4.identity
+                        , viewMatrix = xrView.orientation.inverseMatrix
+                        , modelTransform = Mat4.makeTranslate3 splashPos.x splashPos.y 0
                         , cameraPosition = xrView.orientation.position
                         }
-                    ]
-
-                else
-                    []
-               )
+                )
+                model.bulletSplashes
+            --++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
+            --        [ WebGL.entity
+            --            vertexShader
+            --            fragmentShader
+            --            sphere1
+            --            { perspective = xrView.projectionMatrix
+            --            , viewMatrix = Mat4.identity
+            --            , modelTransform = Mat4.identity
+            --            , cameraPosition = xrView.orientation.position
+            --            }
+            --        ]
+            --
+            --    else
+            --        []
+            --   )
             ++ (case model.cloudTexture of
                     LoadedTexture texture ->
                         [ WebGL.entityWith
@@ -885,6 +945,10 @@ waterMesh =
 sphere1 : Mesh Vertex
 sphere1 =
     sphere 0 (Vec3.vec3 1 0 0) (Point3d.meters 0 0 -1.2) 8
+
+
+splashSphere =
+    sphere 0 (Vec3.vec3 0.7 0.8 1) Point3d.origin 4
 
 
 sphere : Float -> Vec3 -> Point3d u c -> Int -> Mesh Vertex

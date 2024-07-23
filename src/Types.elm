@@ -32,12 +32,18 @@ type alias FrontendModel =
     , startTime : Time.Posix
     , cloudTexture : TextureStatus
     , bullets : List Bullet
+    , bulletSplashes : List Splash
     , lastShot : Time.Posix
+    , lastShotWasOnLeft : Bool
     , holdingHand : Maybe Int
     , plane : Frame3d Meters World { defines : PlaneLocal }
     , lagWarning : Time.Posix
     , boundaryCenter : Point2d Meters World
     }
+
+
+type alias Splash =
+    { position : Point2d Meters World, createdAt : Time.Posix }
 
 
 type PlaneLocal
