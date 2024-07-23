@@ -958,8 +958,7 @@ function getInputSources(session, frame, refSpace) {
         if (pose) {
             let transform = pose.transform;
             controller.__$orientation = __Maybe_Just(
-                { __$position : A3(__MJS_v3, transform.position.x, transform.position.y, transform.position.z)
-                , __$direction : A3(__MJS_v3, transform.orientation.x, transform.orientation.y, transform.orientation.z)
+                { __$position : A3(__MJS_v3, transform.position.x, -transform.position.z, transform.position.y)
                 , __$matrix : new Float64Array(transform.matrix)
                 , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
                 });
@@ -1050,8 +1049,7 @@ function jsViewToElm(view) {
                 : __EI_OtherEye
         , __$projectionMatrix : new Float64Array(view.projectionMatrix)
         , __$orientation :
-            { __$position : A3(__MJS_v3, transform.position.x, transform.position.y, transform.position.z)
-            , __$direction : A3(__MJS_v3, transform.orientation.x, transform.orientation.y, transform.orientation.z)
+            { __$position : A3(__MJS_v3, transform.position.x, -transform.position.z, transform.position.y)
             , __$matrix : new Float64Array(transform.matrix)
             , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
             }

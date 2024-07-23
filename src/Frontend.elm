@@ -1,6 +1,5 @@
 module Frontend exposing (app)
 
-import Angle
 import Array
 import Browser exposing (UrlRequest(..))
 import Direction3d exposing (Direction3d)
@@ -52,9 +51,13 @@ app =
         , update = update
         , updateFromBackend = updateFromBackend
         , subscriptions =
-            \m ->
+            \model ->
                 Subscription.batch
-                    [ Effect.Browser.Events.onAnimationFrame AnimationFrame
+                    [ if model.isInVr then
+                        Subscription.none
+
+                      else
+                        Effect.Browser.Events.onAnimationFrame AnimationFrame
                     , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
                     ]
         , view = view
@@ -549,11 +552,11 @@ view model =
 
 
 worldScaleMat =
-    Mat4.makeScale3 0.01 0.01 0.01
+    Mat4.makeScale3 worldScale worldScale worldScale
 
 
 worldScale =
-    0.1
+    0.01
 
 
 bulletColor =
@@ -754,7 +757,7 @@ entities model =
             ++ (case model.cloudTexture of
                     LoadedTexture texture ->
                         [ WebGL.entityWith
-                            [ blend, DepthTest.default ]
+                            [ blend, DepthTest.less { write = False, near = 0, far = 1 } ]
                             cloudVertexShader
                             cloudFragmentShader
                             clouds
@@ -831,7 +834,6 @@ clouds =
                 , { position = Vec3.vec3 0 0 t }
                 ]
             )
-        |> List.reverse
         |> quadsToMesh
 
 
@@ -859,19 +861,6 @@ floorAxes =
     , { position = Vec3.vec3 thickness 0 length, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
     , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
     , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
-    ]
-        |> quadsToMesh
-
-
-verticalLine =
-    let
-        thickness =
-            0.02
-    in
-    [ { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 0 1 0, normal = zNormal }
-    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 0 1 0, normal = zNormal }
-    , { position = Vec3.vec3 0 thickness 10, color = Vec3.vec3 0 1 0, normal = zNormal }
-    , { position = Vec3.vec3 0 -thickness 10, color = Vec3.vec3 0 1 0, normal = zNormal }
     ]
         |> quadsToMesh
 

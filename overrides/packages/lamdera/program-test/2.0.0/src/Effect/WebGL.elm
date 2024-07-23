@@ -407,7 +407,7 @@ type alias XrInput =
 
 
 type alias XrOrientation =
-    { position : Vec3, direction : Vec3, matrix : Mat4, inverseMatrix : Mat4 }
+    { position : Vec3, matrix : Mat4, inverseMatrix : Mat4 }
 
 
 type XrHandedness
@@ -467,15 +467,9 @@ convertMatToZUp mat4 =
     Mat4.mul mat4 zUpMat
 
 
-convertVecToZUp : Vec3 -> Vec3
-convertVecToZUp vec3 =
-    Vec3.vec3 (Vec3.getX vec3) -(Vec3.getZ vec3) (Vec3.getY vec3)
-
-
 orientationToZUp : XrOrientation -> XrOrientation
 orientationToZUp xrOrientation =
-    { position = convertVecToZUp xrOrientation.position
-    , direction = convertVecToZUp xrOrientation.direction
+    { position = xrOrientation.position
     , matrix = convertMatToZUp xrOrientation.matrix
     , inverseMatrix = convertMatToZUp xrOrientation.inverseMatrix
     }
@@ -563,12 +557,7 @@ inputFromInternal input =
     , orientation =
         Maybe.map
             (\a ->
-                let
-                    m =
-                        Mat4.toRecord a.matrix
-                in
-                { position = convertVecToZUp a.position
-                , direction = convertVecToZUp a.direction
+                { position = a.position
                 , matrix =
                     Mat4.mul (Mat4.mul zUpMatInverse a.matrix) zUpInputMat
                 , inverseMatrix = Mat4.identity --Mat4.mul zUpMatInverse a.inverseMatrix

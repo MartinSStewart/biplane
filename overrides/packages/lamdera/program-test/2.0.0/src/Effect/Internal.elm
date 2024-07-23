@@ -160,7 +160,7 @@ type alias XrButton =
 
 
 type alias XrOrientation =
-    { position : Vec3, direction : Vec3, matrix : Mat4, inverseMatrix : Mat4 }
+    { position : Vec3, matrix : Mat4, inverseMatrix : Mat4 }
 
 
 type XrHandedness
