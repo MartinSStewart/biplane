@@ -1,6 +1,6 @@
 module Frontend exposing (app)
 
-import Array
+import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Direction3d exposing (Direction3d)
 import Duration exposing (Duration, Seconds)
@@ -400,7 +400,7 @@ vrUpdate pose model =
                 bullets
         , bulletSplashes =
             List.filter
-                (\splash -> Duration.from splash.createdAt pose.time |> Quantity.lessThan Duration.second)
+                (\splash -> Duration.from splash.createdAt pose.time |> Quantity.lessThan splashAnimDuration)
                 splashes
         , lastShot =
             if isShooting then
@@ -782,22 +782,36 @@ entities model =
             , cameraPosition = xrView.orientation.position
             }
         ]
-            ++ List.map
-                (\splash ->
+            ++ List.foldl
+                (\splash a ->
                     let
                         splashPos =
                             Point2d.toMeters splash.position
+
+                        elapsedTime =
+                            Duration.from splash.createdAt time
+
+                        frame : Int
+                        frame =
+                            Quantity.ratio elapsedTime splashAnimDuration * splashAnimFrameCount |> floor
                     in
-                    WebGL.entity
-                        vertexShader
-                        fragmentShader
-                        splashSphere
-                        { perspective = xrView.projectionMatrix
-                        , viewMatrix = xrView.orientation.inverseMatrix
-                        , modelTransform = Mat4.makeTranslate3 splashPos.x splashPos.y 0
-                        , cameraPosition = xrView.orientation.position
-                        }
+                    case Array.get frame splashFrames of
+                        Just mesh ->
+                            WebGL.entity
+                                vertexShader
+                                fragmentShader
+                                mesh
+                                { perspective = xrView.projectionMatrix
+                                , viewMatrix = xrView.orientation.inverseMatrix
+                                , modelTransform = Mat4.makeTranslate3 splashPos.x splashPos.y 0
+                                , cameraPosition = xrView.orientation.position
+                                }
+                                :: a
+
+                        Nothing ->
+                            a
                 )
+                []
                 model.bulletSplashes
             --++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
             --        [ WebGL.entity
@@ -949,6 +963,104 @@ sphere1 =
 
 splashSphere =
     sphere 0 (Vec3.vec3 0.7 0.8 1) Point3d.origin 4
+
+
+splashAnimFrameCount =
+    60
+
+
+splashAnimDuration =
+    Duration.milliseconds 600
+
+
+splashFrames : Array (Mesh Vertex)
+splashFrames =
+    List.range 0 (splashAnimFrameCount - 1)
+        |> List.map (\i -> getSplashFrame (toFloat i / splashAnimFrameCount))
+        |> Array.fromList
+
+
+getSplashFrame : Float -> Mesh Vertex
+getSplashFrame t =
+    let
+        dir =
+            Direction3d.z
+
+        position =
+            Point3d.origin
+
+        t2 =
+            if t < 0.1 then
+                t * 10
+
+            else
+                1 - (((t - 0.1) / 0.9) ^ 2)
+
+        vDir : Vector3d Meters World
+        vDir =
+            Vector3d.meters 0 0 (worldScale * 10 * t2)
+
+        ( d1, d2 ) =
+            Direction3d.perpendicularBasis dir
+
+        radius =
+            worldScale * (0.3 + t * t * 1)
+
+        v1 =
+            Direction3d.toVector d1 |> Vector3d.scaleBy radius |> Vector3d.unwrap |> Vector3d.unsafe
+
+        v2 =
+            Direction3d.toVector d2 |> Vector3d.scaleBy radius |> Vector3d.unwrap |> Vector3d.unsafe
+
+        p1 =
+            Point3d.translateBy v1 position
+
+        p2 =
+            Point3d.translateBy v2 position
+
+        p3 =
+            Point3d.translateBy (Vector3d.reverse v1) position
+
+        p4 =
+            Point3d.translateBy (Vector3d.reverse v2) position
+
+        splashColor =
+            Vec3.vec3 0.7 0.8 1
+
+        i =
+            0
+    in
+    WebGL.indexedTriangles
+        [ -- Bullet trail tail
+          { position = Point3d.toVec3 p1, color = splashColor, normal = zNormal, shininess = 20 }
+        , { position = Point3d.toVec3 p2, color = splashColor, normal = zNormal, shininess = 20 }
+        , { position = Point3d.toVec3 p3, color = splashColor, normal = zNormal, shininess = 20 }
+        , { position = Point3d.toVec3 p4, color = splashColor, normal = zNormal, shininess = 20 }
+        , -- Bullet trail head
+          { position = Point3d.translateBy vDir p1 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
+        , { position = Point3d.translateBy vDir p2 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
+        , { position = Point3d.translateBy vDir p3 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
+        , { position = Point3d.translateBy vDir p4 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
+        ]
+        [ --tail quad
+          ( i, i + 1, i + 2 )
+        , ( i + 2, i + 3, i )
+        , -- head quad
+          ( i + 4, i + 5, i + 6 )
+        , ( i + 6, i + 7, i + 4 )
+        , -- side 1
+          ( i, i + 4, i + 1 )
+        , ( i + 1, i + 5, i + 4 )
+        , -- side 2
+          ( i + 1, i + 5, i + 6 )
+        , ( i + 1, i + 6, i + 2 )
+        , -- side 3
+          ( i + 2, i + 6, i + 3 )
+        , ( i + 6, i + 7, i + 3 )
+        , -- side 4
+          ( i + 7, i + 3, i + 4 )
+        , ( i + 4, i, i + 3 )
+        ]
 
 
 sphere : Float -> Vec3 -> Point3d u c -> Int -> Mesh Vertex
