@@ -165,7 +165,7 @@ update msg model =
 
         PressedEnterVr ->
             ( model
-            , WebGL.requestXrStart [ WebGL.clearColor 0.5 0.5 0.5 1, WebGL.depth 1 ] |> Task.attempt StartedXr
+            , WebGL.requestXrStart [ WebGL.clearColor 0.5 0.6 1 1, WebGL.depth 1 ] |> Task.attempt StartedXr
             )
 
         StartedXr result ->
@@ -332,9 +332,22 @@ vrUpdate pose model =
                             p =
                                 Point3d.translateBy (Vector3d.for elapsedTime bullet.velocity) bullet.position
                         in
-                        if Point3d.zCoordinate p |> Quantity.lessThanZero then
+                        if Point3d.zCoordinate p |> Quantity.lessThan waterZ then
+                            let
+                                end : { x : Float, y : Float, z : Float }
+                                end =
+                                    Point3d.toMeters p
+
+                                start : { x : Float, y : Float, z : Float }
+                                start =
+                                    Point3d.toMeters bullet.position
+
+                                t : Float
+                                t =
+                                    (Length.inMeters waterZ - start.z) / (end.z - start.z)
+                            in
                             ( bullets2
-                            , { position = Point2d.xy (Point3d.xCoordinate p) (Point3d.yCoordinate p)
+                            , { position = Point2d.meters (t * (end.x - start.x) + start.x) (t * (end.y - start.y) + start.y)
                               , createdAt = pose.time
                               }
                                 :: splashes2
@@ -417,7 +430,7 @@ vrUpdate pose model =
         , plane = newFrame
         , lastVrUpdate = pose.time
         , lagWarning =
-            if elapsedTime |> Quantity.greaterThan (Duration.milliseconds 15) then
+            if elapsedTime |> Quantity.greaterThan (Duration.milliseconds 50) then
                 pose.time
 
             else
@@ -563,6 +576,10 @@ getQuadIndicesHelper list indexOffset newList =
 
         _ ->
             newList
+
+
+waterZ =
+    Length.meters 0.5
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -732,7 +749,7 @@ entities model =
             model.islandMesh
             { perspective = xrView.projectionMatrix
             , viewMatrix = xrView.orientation.inverseMatrix
-            , modelTransform = Mat4.mul (Mat4.makeTranslate3 islandPos.x islandPos.y 0) worldScaleMat
+            , modelTransform = Mat4.mul (Mat4.makeTranslate3 islandPos.x islandPos.y (Length.inMeters waterZ)) worldScaleMat
             , cameraPosition = xrView.orientation.position
             }
         , WebGL.entity
@@ -803,7 +820,7 @@ entities model =
                                 mesh
                                 { perspective = xrView.projectionMatrix
                                 , viewMatrix = xrView.orientation.inverseMatrix
-                                , modelTransform = Mat4.makeTranslate3 splashPos.x splashPos.y 0
+                                , modelTransform = Mat4.makeTranslate3 splashPos.x splashPos.y (Length.inMeters waterZ)
                                 , cameraPosition = xrView.orientation.position
                                 }
                                 :: a
@@ -813,31 +830,33 @@ entities model =
                 )
                 []
                 model.bulletSplashes
-            --++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
-            --        [ WebGL.entity
-            --            vertexShader
-            --            fragmentShader
-            --            sphere1
-            --            { perspective = xrView.projectionMatrix
-            --            , viewMatrix = Mat4.identity
-            --            , modelTransform = Mat4.identity
-            --            , cameraPosition = xrView.orientation.position
-            --            }
-            --        ]
-            --
-            --    else
-            --        []
-            --   )
+            ++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
+                    [ WebGL.entity
+                        vertexShader
+                        fragmentShader
+                        sphere1
+                        { perspective = xrView.projectionMatrix
+                        , viewMatrix = Mat4.identity
+                        , modelTransform = Mat4.identity
+                        , cameraPosition = xrView.orientation.position
+                        }
+                    ]
+
+                else
+                    []
+               )
             ++ (case model.cloudTexture of
                     LoadedTexture texture ->
                         [ WebGL.entityWith
                             [ blend, DepthTest.less { write = False, near = 0, far = 1 } ]
                             cloudVertexShader
                             cloudFragmentShader
-                            clouds
+                            cloudMesh
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.orientation.inverseMatrix
-                            , modelTransform = Mat4.makeTranslate3 0 0 1 |> Mat4.scale3 1 1 0.2
+                            , modelTransform =
+                                Mat4.makeTranslate3 0 0 (0.5 + Length.inMeters waterZ)
+                                    |> Mat4.scale3 1 1 0.2
                             , texture = texture
                             }
                         ]
@@ -880,8 +899,8 @@ sunMesh =
         |> quadsToMesh
 
 
-clouds : Mesh CloudVertex
-clouds =
+cloudMesh : Mesh CloudVertex
+cloudMesh =
     let
         start =
             0
@@ -948,10 +967,10 @@ waterMesh =
         color =
             Vec3.vec3 0.2 0.3 1
     in
-    [ { position = Vec3.vec3 size -size 0, color = color, normal = zNormal, shininess = 200 }
-    , { position = Vec3.vec3 size size 0, color = color, normal = zNormal, shininess = 200 }
-    , { position = Vec3.vec3 -size size 0, color = color, normal = zNormal, shininess = 200 }
-    , { position = Vec3.vec3 -size -size 0, color = color, normal = zNormal, shininess = 200 }
+    [ { position = Vec3.vec3 size -size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
+    , { position = Vec3.vec3 size size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
+    , { position = Vec3.vec3 -size size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
+    , { position = Vec3.vec3 -size -size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
     ]
         |> quadsToMesh
 
