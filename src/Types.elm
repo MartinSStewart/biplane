@@ -31,6 +31,7 @@ type alias FrontendModel =
     , islandMesh : Effect.WebGL.Mesh Vertex
     , startTime : Time.Posix
     , cloudTexture : TextureStatus
+    , waterTexture : TextureStatus
     , bullets : List Bullet
     , bulletSplashes : List Splash
     , lastShot : Time.Posix
@@ -75,6 +76,11 @@ type alias Vertex =
     }
 
 
+type alias WaterVertex =
+    { position : Vec3
+    }
+
+
 type alias CloudVertex =
     { position : Vec3
     }
@@ -100,6 +106,7 @@ type FrontendMsg
     | TriggeredEndXrSession
     | GotStartTime Time.Posix
     | GotCloudTexture (Result Effect.WebGL.Texture.Error Texture)
+    | GotWaterTexture (Result Effect.WebGL.Texture.Error Texture)
 
 
 type ToBackend

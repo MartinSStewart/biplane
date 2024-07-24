@@ -77,6 +77,7 @@ init url key =
       , biplaneMesh = WebGL.triangleFan []
       , islandMesh = WebGL.triangleFan []
       , cloudTexture = LoadingTexture
+      , waterTexture = LoadingTexture
       , plane = Frame3d.atOrigin
       , holdingHand = Just 1
       , bullets = []
@@ -105,6 +106,16 @@ init url key =
             }
             "/cloud-texture.png"
             |> Task.attempt GotCloudTexture
+        , Effect.WebGL.Texture.loadWith
+            { magnify = Effect.WebGL.Texture.linear
+            , minify = Effect.WebGL.Texture.linearMipmapLinear
+            , horizontalWrap = Effect.WebGL.Texture.repeat
+            , verticalWrap = Effect.WebGL.Texture.repeat
+            , flipY = False
+            , premultiplyAlpha = False
+            }
+            "/ocean-texture.png"
+            |> Task.attempt GotWaterTexture
         ]
     )
 
@@ -283,6 +294,19 @@ update msg model =
             , Command.none
             )
 
+        GotWaterTexture result ->
+            ( { model
+                | waterTexture =
+                    case result of
+                        Ok texture ->
+                            LoadedTexture texture
+
+                        Err error ->
+                            TextureError (Debug.log "water texture error" error)
+              }
+            , Command.none
+            )
+
 
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 vrUpdate pose model =
@@ -430,7 +454,7 @@ vrUpdate pose model =
         , plane = newFrame
         , lastVrUpdate = pose.time
         , lagWarning =
-            if elapsedTime |> Quantity.greaterThan (Duration.milliseconds 50) then
+            if elapsedTime |> Quantity.greaterThan (Duration.milliseconds 30) then
                 pose.time
 
             else
@@ -755,15 +779,6 @@ entities model =
         , WebGL.entity
             vertexShader
             fragmentShader
-            waterMesh
-            { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.orientation.inverseMatrix
-            , modelTransform = Mat4.identity
-            , cameraPosition = xrView.orientation.position
-            }
-        , WebGL.entity
-            vertexShader
-            fragmentShader
             sunMesh
             { perspective = xrView.projectionMatrix
             , viewMatrix = xrView.orientation.inverseMatrix
@@ -831,7 +846,8 @@ entities model =
                 []
                 model.bulletSplashes
             ++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
-                    [ WebGL.entity
+                    [ WebGL.entityWith
+                        []
                         vertexShader
                         fragmentShader
                         sphere1
@@ -844,6 +860,21 @@ entities model =
 
                 else
                     []
+               )
+            ++ (case model.waterTexture of
+                    LoadedTexture texture ->
+                        [ WebGL.entity
+                            waterVertexShader
+                            waterFragmentShader
+                            waterMesh
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.orientation.inverseMatrix
+                            , texture = texture
+                            }
+                        ]
+
+                    _ ->
+                        []
                )
             ++ (case model.cloudTexture of
                     LoadedTexture texture ->
@@ -958,19 +989,16 @@ floorAxes =
         |> quadsToMesh
 
 
-waterMesh : Mesh Vertex
+waterMesh : Mesh WaterVertex
 waterMesh =
     let
         size =
             200
-
-        color =
-            Vec3.vec3 0.2 0.3 1
     in
-    [ { position = Vec3.vec3 size -size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
-    , { position = Vec3.vec3 size size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
-    , { position = Vec3.vec3 -size size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
-    , { position = Vec3.vec3 -size -size (Length.inMeters waterZ), color = color, normal = zNormal, shininess = 200 }
+    [ { position = Vec3.vec3 size -size (Length.inMeters waterZ) }
+    , { position = Vec3.vec3 size size (Length.inMeters waterZ) }
+    , { position = Vec3.vec3 -size size (Length.inMeters waterZ) }
+    , { position = Vec3.vec3 -size -size (Length.inMeters waterZ) }
     ]
         |> quadsToMesh
 
@@ -1138,6 +1166,37 @@ type alias CloudUniforms =
 
 type alias Varying =
     { vColor : Vec3, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3, vShininess : Float }
+
+
+waterVertexShader : Shader WaterVertex { u | perspective : Mat4, viewMatrix : Mat4 } { vPosition : Vec2 }
+waterVertexShader =
+    [glsl|
+attribute vec3 position;
+
+uniform mat4 viewMatrix;
+uniform mat4 perspective;
+
+varying vec2 vPosition;
+
+void main(void) {
+    gl_Position = perspective * viewMatrix * vec4(position, 1.0);
+    vPosition = position.xy;
+}
+    |]
+
+
+waterFragmentShader : Shader {} { u | texture : Texture } { vPosition : Vec2 }
+waterFragmentShader =
+    [glsl|
+precision mediump float;
+varying vec2 vPosition;
+
+uniform sampler2D texture;
+
+void main(void) {
+    gl_FragColor = texture2D(texture, vPosition * 10.0);
+}
+    |]
 
 
 vertexShader : Shader Vertex Uniforms Varying
