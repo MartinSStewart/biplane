@@ -749,6 +749,10 @@ entities model =
             Point2d.unwrap model.boundaryCenter
     in
     \{ time, xrView, inputs } ->
+        --let
+        --    _ =
+        --        Debug.log "time" time
+        --in
         [ --WebGL.entity
           --    vertexShader
           --    fragmentShader
@@ -870,6 +874,7 @@ entities model =
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.orientation.inverseMatrix
                             , texture = texture
+                            , time = Duration.from model.startTime time |> Duration.inSeconds
                             }
                         ]
 
@@ -1185,16 +1190,21 @@ void main(void) {
     |]
 
 
-waterFragmentShader : Shader {} { u | texture : Texture } { vPosition : Vec2 }
+waterFragmentShader : Shader {} { u | texture : Texture, time : Float } { vPosition : Vec2 }
 waterFragmentShader =
     [glsl|
 precision mediump float;
 varying vec2 vPosition;
 
 uniform sampler2D texture;
+uniform float time;
 
 void main(void) {
-    gl_FragColor = texture2D(texture, vPosition * 10.0);
+    gl_FragColor =
+        ( texture2D(texture, vec2(0.0123, -0.03451) * time + vPosition * 8.65621) * ((sin(time) + 2.0) / 4.0)
+        + texture2D(texture, vec2(-0.023169, 0.01451) * time + vPosition * 10.0) * ((sin(time+3.1415) + 2.0) / 4.0)
+        + texture2D(texture, vPosition * 3.0) / 2.0
+        );
 }
     |]
 

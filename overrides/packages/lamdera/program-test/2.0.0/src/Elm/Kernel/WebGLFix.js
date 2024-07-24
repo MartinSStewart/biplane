@@ -855,6 +855,7 @@ var xrSession = null;
 var xrGl = null;
 var xrReferenceSpace = null;
 var xrModel = null;
+var xrStartTime = 0;
 
 function _WebGLFix_requestXrStart(options) {
     return __Scheduler_binding(function (callback) {
@@ -868,6 +869,8 @@ function _WebGLFix_requestXrStart(options) {
                         requiredFeatures: ["local-floor"],
                         optionalFeatures: ["bounded-floor"],
                     }).then((session) => {
+
+                    xrStartTime = Date.now();
                     xrSession = session;
                     // Listen for the sessions 'end' event so we can respond if the user
                     // or UA ends the session for any reason.
@@ -1000,7 +1003,7 @@ function _WebGLFix_renderXrFrame(entities) {
 
                     let poseData = { __$transform : new Float64Array(pose.transform.matrix)
                         , __$views : __List_fromArray(pose.views.map(jsViewToElm))
-                        , __$time : time
+                        , __$time : xrStartTime + time
                         , __$boundary : __Maybe_Nothing
                         , __$inputs : inputs
                         };
@@ -1019,7 +1022,7 @@ function _WebGLFix_renderXrFrame(entities) {
                     for (let view of pose.views) {
                         let viewport = glLayer.getViewport(view);
 
-                        xrModel.__entities = entities({ __$time : time, __$xrView : jsViewToElm(view), __$inputs : inputs });
+                        xrModel.__entities = entities({ __$time : xrStartTime + time, __$xrView : jsViewToElm(view), __$inputs : inputs });
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
                         xrDrawGL(xrModel);
                     }
