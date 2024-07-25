@@ -1001,30 +1001,46 @@ function _WebGLFix_renderXrFrame(entities) {
                 if (pose) {
                     let inputs = getInputSources(xrSession, frame, xrReferenceSpace);
 
-                    let poseData = { __$transform : new Float64Array(pose.transform.matrix)
-                        , __$views : __List_fromArray(pose.views.map(jsViewToElm))
-                        , __$time : xrStartTime + time
-                        , __$boundary : __Maybe_Nothing
-                        , __$inputs : inputs
-                        };
-
-
-                    if (xrReferenceSpace.boundsGeometry) {
-                         poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, -p.z); })));
-                    }
-
                     let glLayer = frame.session.renderState.baseLayer;
 
                     xrGl.bindFramebuffer(xrGl.FRAMEBUFFER, glLayer.framebuffer);
                     xrGl.clear(xrGl.COLOR_BUFFER_BIT | xrGl.DEPTH_BUFFER_BIT | xrGl.STENCIL_BUFFER_BIT);
 
+                    let elmViews = [];
 
                     for (let view of pose.views) {
                         let viewport = glLayer.getViewport(view);
 
-                        xrModel.__entities = entities({ __$time : xrStartTime + time, __$xrView : jsViewToElm(view), __$inputs : inputs });
+                        let transform = view.transform;
+                        let elmView = { __$eye :
+                              view.eye === "left"
+                                  ? __EI_LeftEye
+                                  : view.eye === "right"
+                                      ? __EI_RightEye
+                                      : __EI_OtherEye
+                              , __$projectionMatrix : new Float64Array(view.projectionMatrix)
+                              , __$orientation :
+                                  { __$position : A3(__MJS_v3, transform.position.x, -transform.position.z, transform.position.y)
+                                  , __$matrix : new Float64Array(transform.matrix)
+                                  , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
+                                  }
+                              };
+                        elmViews.push(elmView);
+
+                        xrModel.__entities = entities({ __$time : xrStartTime + time, __$xrView : elmView, __$inputs : inputs });
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
                         xrDrawGL(xrModel);
+                    }
+
+                    let poseData = { __$transform : new Float64Array(pose.transform.matrix)
+                        , __$views : __List_fromArray(elmViews)
+                        , __$time : xrStartTime + time
+                        , __$boundary : __Maybe_Nothing
+                        , __$inputs : inputs
+                        };
+
+                    if (xrReferenceSpace.boundsGeometry) {
+                         poseData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, -p.z); })));
                     }
 
                     callback(__Scheduler_succeed(poseData));
@@ -1039,24 +1055,6 @@ function _WebGLFix_renderXrFrame(entities) {
             callback(__Scheduler_fail(__EI_XrSessionNotStarted));
         }
     });
-}
-
-function jsViewToElm(view) {
-    let transform = view.transform;
-
-    return { __$eye :
-        view.eye === "left"
-            ? __EI_LeftEye
-            : view.eye === "right"
-                ? __EI_RightEye
-                : __EI_OtherEye
-        , __$projectionMatrix : new Float64Array(view.projectionMatrix)
-        , __$orientation :
-            { __$position : A3(__MJS_v3, transform.position.x, -transform.position.z, transform.position.y)
-            , __$matrix : new Float64Array(transform.matrix)
-            , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
-            }
-        };
 }
 
 /**

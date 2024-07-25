@@ -78,8 +78,8 @@ init url key =
       , islandMesh = WebGL.triangleFan []
       , cloudTexture = LoadingTexture
       , waterTexture = LoadingTexture
-      , plane = Frame3d.atOrigin
-      , holdingHand = Just 1
+      , plane = Point3d.meters 0 0.5 1.5 |> Frame3d.atPoint
+      , holdingHand = Nothing
       , bullets = []
       , bulletSplashes = []
       , lastShot = Time.millisToPosix 0
@@ -315,6 +315,19 @@ vrUpdate pose model =
         maybeInput =
             Maybe.andThen (\index -> List.Extra.getAt index pose.inputs) model.holdingHand
 
+        grabbed : Maybe Int
+        grabbed =
+            List.Extra.findIndex
+                (\input ->
+                    case List.Extra.getAt 1 input.buttons of
+                        Just button ->
+                            button.value > 0.5
+
+                        Nothing ->
+                            False
+                )
+                pose.inputs
+
         isShooting : Bool
         isShooting =
             case maybeInput of
@@ -459,6 +472,7 @@ vrUpdate pose model =
 
             else
                 model.lagWarning
+        , holdingHand = grabbed
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model)
@@ -865,6 +879,25 @@ entities model =
                 else
                     []
                )
+            ++ List.filterMap
+                (\input ->
+                    case input.orientation of
+                        Just orientation ->
+                            WebGL.entity
+                                vertexShader
+                                fragmentShader
+                                splashSphere
+                                { perspective = xrView.projectionMatrix
+                                , viewMatrix = xrView.orientation.inverseMatrix
+                                , modelTransform = orientation.matrix
+                                , cameraPosition = xrView.orientation.position
+                                }
+                                |> Just
+
+                        Nothing ->
+                            Nothing
+                )
+                inputs
             ++ (case model.waterTexture of
                     LoadedTexture texture ->
                         [ WebGL.entity
@@ -1050,7 +1083,7 @@ getSplashFrame t =
 
         vDir : Vector3d Meters World
         vDir =
-            Vector3d.meters 0 0 (worldScale * 10 * t2)
+            Vector3d.meters 0 0 (worldScale * 5 * t2)
 
         ( d1, d2 ) =
             Direction3d.perpendicularBasis dir
@@ -1119,7 +1152,7 @@ sphere : Float -> Vec3 -> Point3d u c -> Int -> Mesh Vertex
 sphere shininess color position detail =
     let
         radius =
-            0.1
+            0.01
 
         uDetail =
             detail * 2
