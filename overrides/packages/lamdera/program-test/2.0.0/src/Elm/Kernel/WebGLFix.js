@@ -884,7 +884,18 @@ function _WebGLFix_requestXrStart(options) {
                     // Create a WebGL context to render with, initialized to be compatible
                     // with the XRDisplay we're presenting to.
                     var xrCanvas = document.createElement('canvas');
-                    xrGl = xrCanvas.getContext('webgl', { xrCompatible: true });
+
+                    var contextAttributes = {
+                          alpha: false,
+                          depth: true,
+                          stencil: false,
+                          antialias: false,
+                          premultipliedAlpha: false,
+                          preserveDrawingBuffer: false,
+                          xrCompatible: true
+                        };
+
+                    xrGl = xrCanvas.getContext('webgl', contextAttributes);
 
                     // Use the new WebGL context to create a XRWebGLLayer and set it as the
                     // sessions baseLayer. This allows any content rendered to the layer to
@@ -898,7 +909,7 @@ function _WebGLFix_requestXrStart(options) {
 
                             xrReferenceSpace = boundedFloor;
 
-                            xrModel = { __entities: [], __cache: {}, __options: options };
+                            xrModel = { __cache: {}, __options: options };
 
                             xrRender(xrModel);
 
@@ -914,7 +925,7 @@ function _WebGLFix_requestXrStart(options) {
                                 .then((localFloor) => {
                                     xrReferenceSpace = localFloor;
 
-                                    xrModel = { __entities: [], __cache: {}, __options: options };
+                                    xrModel = { __cache: {}, __options: options };
 
                                     xrRender(xrModel);
 
@@ -1018,9 +1029,8 @@ function _WebGLFix_renderXrFrame(entities) {
                               };
                         elmViews.push(elmView);
 
-                        xrModel.__entities = entities({ __$time : xrStartTime + time, __$xrView : elmView, __$inputs : inputs });
                         xrGl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
-                        xrDrawGL(xrModel);
+                        xrDrawGL(entities({ __$time : xrStartTime + time, __$xrView : elmView, __$inputs : inputs }), xrModel);
                     }
 
                     let poseData = { __$transform : new Float64Array(pose.transform.matrix)
@@ -1054,7 +1064,6 @@ function _WebGLFix_renderXrFrame(entities) {
  *  @param {Object} model.__cache that may contain the following properties:
            gl, shaders, programs, buffers, textures
  *  @param {List<Option>} model.__options list of options coming from Elm
- *  @param {List<Entity>} model.__entities list of entities coming from Elm
  */
 function xrRender(model) {
   var options = {
@@ -1111,7 +1120,7 @@ function xrRender(model) {
   }
 }
 
-var xrDrawGL = function (model) {
+var xrDrawGL = function (entities, model) {
   var cache = model.__cache;
   var gl = cache.gl;
 
@@ -1255,5 +1264,5 @@ var xrDrawGL = function (model) {
     }
   }
 
-  _WebGLFix_listEach(drawEntity, model.__entities);
+  _WebGLFix_listEach(drawEntity, entities);
 }
