@@ -1033,6 +1033,8 @@ function _WebGLFix_renderXrFrame(entities) {
                         xrDrawGL(entities({ __$time : xrStartTime + time, __$xrView : elmView, __$inputs : inputs }), xrModel);
                     }
 
+                    //console.log(createImageFromFramebuffer(xrGl, 2064, 2208));
+
                     let poseData = { __$transform : new Float64Array(pose.transform.matrix)
                         , __$views : __List_fromArray(elmViews)
                         , __$time : xrStartTime + time
@@ -1265,4 +1267,25 @@ var xrDrawGL = function (entities, model) {
   }
 
   _WebGLFix_listEach(drawEntity, entities);
+}
+
+
+function createImageFromFramebuffer(gl, width, height) {
+    // Read the contents of the framebuffer
+    var data = new Uint8Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, data);
+
+    // Create a 2D canvas to store the result
+    var canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    var context = canvas.getContext('2d');
+
+    // Copy the pixels to a 2D canvas
+    var imageData = context.createImageData(width, height);
+    imageData.data.set(data);
+    context.putImageData(imageData, 0, 0);
+
+    var img = new Image();
+    return canvas.toDataURL();
 }

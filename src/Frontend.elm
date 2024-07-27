@@ -1,7 +1,10 @@
 module Frontend exposing (app)
 
 import Array exposing (Array)
+import Array2D
+import BayerMatrix
 import Browser exposing (UrlRequest(..))
+import Bytes.Encode
 import Direction3d exposing (Direction3d)
 import Duration exposing (Duration, Seconds)
 import Effect.Browser.Events
@@ -36,6 +39,7 @@ import Point3d exposing (Point3d)
 import Quantity exposing (Product, Quantity, Rate)
 import TriangularMesh
 import Types exposing (..)
+import Unsafe
 import Url
 import Vector3d exposing (Vector3d)
 import WebGL.Settings.Blend as Blend
@@ -118,6 +122,42 @@ init url key =
             |> Task.attempt GotWaterTexture
         ]
     )
+
+
+bayerTexture : Texture
+bayerTexture =
+    let
+        size =
+            4
+
+        matrix =
+            BayerMatrix.matrix size
+    in
+    List.range 0 (size * size - 1)
+        |> List.map
+            (\index ->
+                let
+                    x =
+                        modBy size index
+
+                    y =
+                        index // size
+                in
+                Array2D.get x y matrix |> Maybe.withDefault 0 |> Bytes.Encode.unsignedInt8
+            )
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+        |> Effect.WebGL.Texture.loadBytesWith
+            { magnify = Effect.WebGL.Texture.nearest
+            , minify = Effect.WebGL.Texture.nearest
+            , horizontalWrap = Effect.WebGL.Texture.repeat
+            , verticalWrap = Effect.WebGL.Texture.repeat
+            , flipY = False
+            , premultiplyAlpha = False
+            }
+            ( size, size )
+            Effect.WebGL.Texture.luminance
+        |> Unsafe.assumeOk
 
 
 
@@ -762,6 +802,21 @@ bulletsMesh bullets =
     WebGL.indexedTriangles vertices indices2
 
 
+clearScreen =
+    WebGL.entityWith
+        [ DepthTest.always { write = True, near = 0, far = 1 } ]
+        flatVertexShader
+        flatFragmentShader
+        (quadsToMesh
+            [ { position = Vec2.vec2 -1 -1 }
+            , { position = Vec2.vec2 1 -1 }
+            , { position = Vec2.vec2 1 1 }
+            , { position = Vec2.vec2 -1 1 }
+            ]
+        )
+        {}
+
+
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model =
     let
@@ -776,7 +831,8 @@ entities model =
             viewPosition =
                 mat4ToPoint3d xrView.viewMatrix |> Point3d.toVec3
         in
-        [ WebGL.entity
+        [ clearScreen
+        , WebGL.entity
             vertexShader
             fragmentShader
             model.boundaryMesh
@@ -917,7 +973,9 @@ entities model =
             ++ (case model.cloudTexture of
                     LoadedTexture texture ->
                         [ WebGL.entityWith
-                            [ blend, DepthTest.less { write = False, near = 0, far = 1 } ]
+                            [ blend
+                            , DepthTest.less { write = False, near = 0, far = 1 }
+                            ]
                             cloudVertexShader
                             cloudFragmentShader
                             cloudMesh
@@ -927,6 +985,7 @@ entities model =
                                 Mat4.makeTranslate3 0 0 (0.5 + Length.inMeters waterZ)
                                     |> Mat4.scale3 1 1 0.2
                             , texture = texture
+                            , bayerTexture = bayerTexture
                             }
                         ]
 
@@ -1195,7 +1254,7 @@ type alias Uniforms =
 
 
 type alias CloudUniforms =
-    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, texture : Texture }
+    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, texture : Texture, bayerTexture : Texture }
 
 
 
@@ -1352,17 +1411,54 @@ void main(void) {
     |]
 
 
-cloudFragmentShader : Shader {} { u | texture : Texture } { vPosition : Vec3 }
+cloudFragmentShader : Shader {} { u | texture : Texture, bayerTexture : Texture } { vPosition : Vec3 }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vPosition;
 
 uniform sampler2D texture;
+uniform sampler2D bayerTexture;
 
 void main(void) {
     float a = texture2D(texture, vPosition.xy).x;
 
-    gl_FragColor = vec4(1.0, 1.0, 1.0, min(0.2, a - vPosition.z));
+    float b = texture2D(bayerTexture, gl_FragCoord.xy / 8.0).x;
+
+    float z = mod(gl_FragCoord.x - 0.5, 2.0);
+
+    vec3 c =
+        z > 0.49 && z < 0.51
+            ? vec3(1.0, 0.0, 0.0)
+            : z > 0.99
+                ? vec3(0.0, 0.0, 1.0)
+                : z < 0.01
+                    ? vec3(0.0, 1.0, 1.0)
+                    : vec3(0.0, 1.0, 0.0);
+    //gl_FragColor = vec4(1.0, 1.0, 1.0, min(0.2, a - vPosition.z));
+    gl_FragColor = vec4(c, 1.0);
+
+}
+    |]
+
+
+flatVertexShader : Shader { position : Vec2 } u {}
+flatVertexShader =
+    [glsl|
+attribute vec2 position;
+
+void main(void) {
+    gl_Position = vec4(position, 1.0, 1.0);
+}
+    |]
+
+
+flatFragmentShader : Shader {} u {}
+flatFragmentShader =
+    [glsl|
+precision mediump float;
+
+void main(void) {
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
 }
     |]
