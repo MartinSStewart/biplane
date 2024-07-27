@@ -983,7 +983,7 @@ entities model =
                             , viewMatrix = xrView.viewMatrix
                             , modelTransform =
                                 Mat4.makeTranslate3 0 0 (0.5 + Length.inMeters waterZ)
-                                    |> Mat4.scale3 1 1 0.2
+                                    |> Mat4.scale3 1 1 0.1
                             , texture = texture
                             , bayerTexture = bayerTexture
                             , time =
@@ -1043,7 +1043,7 @@ cloudMesh =
             1
 
         layers =
-            30
+            20
 
         size =
             1
@@ -1061,6 +1061,7 @@ cloudMesh =
                 , { position = Vec3.vec3 0 0 t, layer = toFloat index }
                 ]
             )
+        |> List.reverse
         |> quadsToMesh
 
 
@@ -1395,7 +1396,7 @@ void main () {
     |]
 
 
-cloudVertexShader : Shader CloudVertex { u | perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 } { vPosition : Vec3, vLayer : Float }
+cloudVertexShader : Shader CloudVertex { u | perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 } { vPosition : Vec3, center : Vec2 }
 cloudVertexShader =
     [glsl|
 attribute vec3 position;
@@ -1406,22 +1407,22 @@ uniform mat4 viewMatrix;
 uniform mat4 perspective;
 
 varying vec3 vPosition;
-varying float vLayer;
+varying vec2 center;
 
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
     vPosition = position;
-    vLayer = layer;
+    center = (perspective * viewMatrix * modelTransform * vec4(0.5, 0.5, 0.0, 1.0)).xy * vec2(2064.0 / 2.0, 2208.0 / 2.0) + vec2(float(int(layer / 4.0)),mod(layer, 4.0));
 }
     |]
 
 
-cloudFragmentShader : Shader {} { u | texture : Texture, bayerTexture : Texture, time : Float } { vPosition : Vec3, vLayer : Float }
+cloudFragmentShader : Shader {} { u | texture : Texture, bayerTexture : Texture, time : Float } { vPosition : Vec3, center : Vec2 }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vPosition;
-varying float vLayer;
+varying vec2 center;
 
 uniform sampler2D texture;
 uniform sampler2D bayerTexture;
@@ -1430,14 +1431,7 @@ uniform float time;
 void main(void) {
     float a = texture2D(texture, vPosition.xy).x;
 
-    float b = texture2D(
-        bayerTexture,
-        vec2(
-            mod(mod(time, 7.0) + vLayer * 23.0 + gl_FragCoord.x - 0.5, 16.0),
-            mod(time + mod(vLayer * 13.0, 5.0) + gl_FragCoord.y - 0.5, 16.0)
-            ) / 16.0
-        ).x;
-
+    float b = texture2D( bayerTexture, (gl_FragCoord.xy - center) / 16.0).x;
 
     float alpha = min(0.2, a - vPosition.z);
 
