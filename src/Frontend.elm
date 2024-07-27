@@ -127,11 +127,14 @@ init url key =
 bayerTexture : Texture
 bayerTexture =
     let
-        size =
+        iterations =
             4
 
+        size =
+            2 ^ iterations
+
         matrix =
-            BayerMatrix.matrix size
+            BayerMatrix.matrix iterations
     in
     List.range 0 (size * size - 1)
         |> List.map
@@ -972,10 +975,7 @@ entities model =
                )
             ++ (case model.cloudTexture of
                     LoadedTexture texture ->
-                        [ WebGL.entityWith
-                            [ blend
-                            , DepthTest.less { write = False, near = 0, far = 1 }
-                            ]
+                        [ WebGL.entity
                             cloudVertexShader
                             cloudFragmentShader
                             cloudMesh
@@ -986,6 +986,12 @@ entities model =
                                     |> Mat4.scale3 1 1 0.2
                             , texture = texture
                             , bayerTexture = bayerTexture
+                            , time =
+                                Duration.from model.startTime time
+                                    |> Duration.inMilliseconds
+                                    |> round
+                                    |> modBy 100
+                                    |> toFloat
                             }
                         ]
 
@@ -1049,10 +1055,10 @@ cloudMesh =
                     t =
                         start + height * toFloat index / layers
                 in
-                [ { position = Vec3.vec3 size 0 t }
-                , { position = Vec3.vec3 size size t }
-                , { position = Vec3.vec3 0 size t }
-                , { position = Vec3.vec3 0 0 t }
+                [ { position = Vec3.vec3 size 0 t, layer = toFloat index }
+                , { position = Vec3.vec3 size size t, layer = toFloat index }
+                , { position = Vec3.vec3 0 size t, layer = toFloat index }
+                , { position = Vec3.vec3 0 0 t, layer = toFloat index }
                 ]
             )
         |> quadsToMesh
@@ -1253,10 +1259,6 @@ type alias Uniforms =
     { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, cameraPosition : Vec3 }
 
 
-type alias CloudUniforms =
-    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, texture : Texture, bayerTexture : Texture }
-
-
 
 -- Shaders
 
@@ -1393,50 +1395,57 @@ void main () {
     |]
 
 
-cloudVertexShader : Shader CloudVertex CloudUniforms { vPosition : Vec3 }
+cloudVertexShader : Shader CloudVertex { u | perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 } { vPosition : Vec3, vLayer : Float }
 cloudVertexShader =
     [glsl|
 attribute vec3 position;
+attribute float layer;
 
 uniform mat4 modelTransform;
 uniform mat4 viewMatrix;
 uniform mat4 perspective;
 
 varying vec3 vPosition;
+varying float vLayer;
 
 void main(void) {
     gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
     vPosition = position;
+    vLayer = layer;
 }
     |]
 
 
-cloudFragmentShader : Shader {} { u | texture : Texture, bayerTexture : Texture } { vPosition : Vec3 }
+cloudFragmentShader : Shader {} { u | texture : Texture, bayerTexture : Texture, time : Float } { vPosition : Vec3, vLayer : Float }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vPosition;
+varying float vLayer;
 
 uniform sampler2D texture;
 uniform sampler2D bayerTexture;
+uniform float time;
 
 void main(void) {
     float a = texture2D(texture, vPosition.xy).x;
 
-    float b = texture2D(bayerTexture, gl_FragCoord.xy / 8.0).x;
+    float b = texture2D(
+        bayerTexture,
+        vec2(
+            mod(mod(time, 7.0) + vLayer * 23.0 + gl_FragCoord.x - 0.5, 16.0),
+            mod(time + mod(vLayer * 13.0, 5.0) + gl_FragCoord.y - 0.5, 16.0)
+            ) / 16.0
+        ).x;
 
-    float z = mod(gl_FragCoord.x - 0.5, 2.0);
 
-    vec3 c =
-        z > 0.49 && z < 0.51
-            ? vec3(1.0, 0.0, 0.0)
-            : z > 0.99
-                ? vec3(0.0, 0.0, 1.0)
-                : z < 0.01
-                    ? vec3(0.0, 1.0, 1.0)
-                    : vec3(0.0, 1.0, 0.0);
-    //gl_FragColor = vec4(1.0, 1.0, 1.0, min(0.2, a - vPosition.z));
-    gl_FragColor = vec4(c, 1.0);
+    float alpha = min(0.2, a - vPosition.z);
+
+    if (alpha <= b) {
+        discard;
+    }
+
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
 
 }
     |]
