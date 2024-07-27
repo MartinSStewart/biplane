@@ -22,7 +22,6 @@ module Effect.Internal exposing
     , XrEyeType(..)
     , XrHandedness(..)
     , XrInput
-    , XrOrientation
     , XrPose
     , XrRenderError(..)
     , XrStartData
@@ -152,15 +151,11 @@ type alias XrPose =
 
 
 type alias XrInput =
-    { handedness : XrHandedness, orientation : Maybe XrOrientation, buttons : List XrButton, mapping : String }
+    { handedness : XrHandedness, matrix : Maybe Mat4, buttons : List XrButton, mapping : String }
 
 
 type alias XrButton =
     { isPressed : Bool, isTouched : Bool, value : Float }
-
-
-type alias XrOrientation =
-    { position : Vec3, matrix : Mat4, inverseMatrix : Mat4 }
 
 
 type XrHandedness
@@ -170,7 +165,7 @@ type XrHandedness
 
 
 type alias XrView =
-    { eye : XrEyeType, projectionMatrix : Mat4, orientation : XrOrientation }
+    { eye : XrEyeType, projectionMatrix : Mat4, viewMatrix : Mat4 }
 
 
 type XrEyeType

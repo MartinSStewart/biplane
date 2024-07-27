@@ -946,7 +946,7 @@ function getInputSources(session, frame, refSpace) {
                 }))
             , __$handedness : __EI_Unknown
             , __$mapping : gamepad.mapping
-            , __$orientation : __Maybe_Nothing
+            , __$matrix : __Maybe_Nothing
             };
 
         switch (inputSource.handedness) {
@@ -959,12 +959,7 @@ function getInputSources(session, frame, refSpace) {
         }
 
         if (pose) {
-            let transform = pose.transform;
-            controller.__$orientation = __Maybe_Just(
-                { __$position : A3(__MJS_v3, transform.position.x, -transform.position.z, transform.position.y)
-                , __$matrix : new Float64Array(transform.matrix)
-                , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
-                });
+            controller.__$matrix = __Maybe_Just(new Float64Array(pose.transform.matrix));
         }
 
         inputs.push(controller);
@@ -1019,11 +1014,7 @@ function _WebGLFix_renderXrFrame(entities) {
                                       ? __EI_RightEye
                                       : __EI_OtherEye
                               , __$projectionMatrix : new Float64Array(view.projectionMatrix)
-                              , __$orientation :
-                                  { __$position : A3(__MJS_v3, transform.position.x, -transform.position.z, transform.position.y)
-                                  , __$matrix : new Float64Array(transform.matrix)
-                                  , __$inverseMatrix : new Float64Array(transform.inverse.matrix)
-                                  }
+                              , __$viewMatrix : new Float64Array(transform.inverse.matrix)
                               };
                         elmViews.push(elmView);
 

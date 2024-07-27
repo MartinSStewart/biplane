@@ -348,9 +348,9 @@ vrUpdate pose model =
 
         newFrame : Frame3d Meters World { defines : PlaneLocal }
         newFrame =
-            case Maybe.andThen .orientation maybeInput of
-                Just orientation ->
-                    mat4ToFrame3d orientation.matrix
+            case Maybe.andThen .matrix maybeInput of
+                Just matrix ->
+                    mat4ToFrame3d matrix
 
                 Nothing ->
                     model.plane
@@ -522,6 +522,15 @@ mat4ToFrame3d mat4 =
         , yDirection = Direction3d.unsafe { x = m12, y = m22, z = m32 }
         , zDirection = Direction3d.unsafe { x = m13, y = m23, z = m33 }
         }
+
+
+mat4ToPoint3d : Mat4 -> Point3d u c
+mat4ToPoint3d mat4 =
+    let
+        { m14, m24, m34 } =
+            Mat4.toRecord mat4
+    in
+    Point3d.unsafe { x = m14, y = m24, z = m34 }
 
 
 menuButtonIndex : Int
@@ -763,45 +772,36 @@ entities model =
             Point2d.unwrap model.boundaryCenter
     in
     \{ time, xrView, inputs } ->
-        --let
-        --    _ =
-        --        Debug.log "time" time
-        --in
-        [ --WebGL.entity
-          --    vertexShader
-          --    fragmentShader
-          --    floorAxes
-          --    { perspective = xrView.projectionMatrix
-          --    , viewMatrix = xrView.orientation.inverseMatrix
-          --    , modelTransform = Mat4.identity
-          --    , cameraPosition = xrView.orientation.position
-          --    }
-          WebGL.entity
+        let
+            viewPosition =
+                mat4ToPoint3d xrView.viewMatrix |> Point3d.toVec3
+        in
+        [ WebGL.entity
             vertexShader
             fragmentShader
             model.boundaryMesh
             { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.orientation.inverseMatrix
+            , viewMatrix = xrView.viewMatrix
             , modelTransform = Mat4.identity
-            , cameraPosition = xrView.orientation.position
+            , cameraPosition = viewPosition
             }
         , WebGL.entity
             vertexShader
             fragmentShader
             model.islandMesh
             { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.orientation.inverseMatrix
+            , viewMatrix = xrView.viewMatrix
             , modelTransform = Mat4.mul (Mat4.makeTranslate3 islandPos.x islandPos.y (Length.inMeters waterZ)) worldScaleMat
-            , cameraPosition = xrView.orientation.position
+            , cameraPosition = viewPosition
             }
         , WebGL.entity
             vertexShader
             fragmentShader
             sunMesh
             { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.orientation.inverseMatrix
+            , viewMatrix = xrView.viewMatrix
             , modelTransform = Mat4.identity
-            , cameraPosition = xrView.orientation.position
+            , cameraPosition = viewPosition
             }
 
         --, WebGL.entity
@@ -809,27 +809,27 @@ entities model =
         --    fragmentShader
         --    floorAxes
         --    { perspective = xrView.projectionMatrix
-        --    , viewMatrix = xrView.orientation.inverseMatrix
+        --    , viewMatrix = xrView.viewMatrix
         --    , modelTransform = Mat4.identity
-        --    , cameraPosition = xrView.orientation.position
+        --    , cameraPosition = viewPosition
         --    }
         , WebGL.entity
             vertexShader
             fragmentShader
             model.biplaneMesh
             { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.orientation.inverseMatrix
+            , viewMatrix = xrView.viewMatrix
             , modelTransform = Mat4.mul (Frame3d.toMat4 model.plane) worldScaleMat
-            , cameraPosition = xrView.orientation.position
+            , cameraPosition = viewPosition
             }
         , WebGL.entity
             vertexShader
             fragmentShader
             bullets
             { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.orientation.inverseMatrix
+            , viewMatrix = xrView.viewMatrix
             , modelTransform = Mat4.identity
-            , cameraPosition = xrView.orientation.position
+            , cameraPosition = viewPosition
             }
         ]
             ++ List.foldl
@@ -852,9 +852,9 @@ entities model =
                                 fragmentShader
                                 mesh
                                 { perspective = xrView.projectionMatrix
-                                , viewMatrix = xrView.orientation.inverseMatrix
+                                , viewMatrix = xrView.viewMatrix
                                 , modelTransform = Mat4.makeTranslate3 splashPos.x splashPos.y (Length.inMeters waterZ)
-                                , cameraPosition = xrView.orientation.position
+                                , cameraPosition = viewPosition
                                 }
                                 :: a
 
@@ -872,7 +872,7 @@ entities model =
                         { perspective = xrView.projectionMatrix
                         , viewMatrix = Mat4.identity
                         , modelTransform = Mat4.identity
-                        , cameraPosition = xrView.orientation.position
+                        , cameraPosition = viewPosition
                         }
                     ]
 
@@ -881,16 +881,16 @@ entities model =
                )
             ++ List.filterMap
                 (\input ->
-                    case input.orientation of
-                        Just orientation ->
+                    case input.matrix of
+                        Just matrix ->
                             WebGL.entity
                                 vertexShader
                                 fragmentShader
                                 splashSphere
                                 { perspective = xrView.projectionMatrix
-                                , viewMatrix = xrView.orientation.inverseMatrix
-                                , modelTransform = orientation.matrix
-                                , cameraPosition = xrView.orientation.position
+                                , viewMatrix = xrView.viewMatrix
+                                , modelTransform = matrix
+                                , cameraPosition = viewPosition
                                 }
                                 |> Just
 
@@ -905,7 +905,7 @@ entities model =
                             waterFragmentShader
                             waterMesh
                             { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.orientation.inverseMatrix
+                            , viewMatrix = xrView.viewMatrix
                             , texture = texture
                             , time = Duration.from model.startTime time |> Duration.inSeconds
                             }
@@ -922,7 +922,7 @@ entities model =
                             cloudFragmentShader
                             cloudMesh
                             { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.orientation.inverseMatrix
+                            , viewMatrix = xrView.viewMatrix
                             , modelTransform =
                                 Mat4.makeTranslate3 0 0 (0.5 + Length.inMeters waterZ)
                                     |> Mat4.scale3 1 1 0.2

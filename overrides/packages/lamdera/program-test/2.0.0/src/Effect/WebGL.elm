@@ -403,11 +403,7 @@ type alias XrPose =
 
 
 type alias XrInput =
-    { handedness : XrHandedness, orientation : Maybe XrOrientation, buttons : List XrButton, mapping : String }
-
-
-type alias XrOrientation =
-    { position : Vec3, matrix : Mat4, inverseMatrix : Mat4 }
+    { handedness : XrHandedness, matrix : Maybe Mat4, buttons : List XrButton, mapping : String }
 
 
 type XrHandedness
@@ -421,7 +417,7 @@ type alias XrButton =
 
 
 type alias XrView =
-    { eye : XrEyeType, orientation : XrOrientation, projectionMatrix : Mat4 }
+    { eye : XrEyeType, viewMatrix : Mat4, projectionMatrix : Mat4 }
 
 
 type XrEyeType
@@ -462,19 +458,6 @@ zUpMatInverse =
     Mat4.inverseOrthonormal zUpMat
 
 
-convertMatToZUp : Mat4 -> Mat4
-convertMatToZUp mat4 =
-    Mat4.mul mat4 zUpMat
-
-
-orientationToZUp : XrOrientation -> XrOrientation
-orientationToZUp xrOrientation =
-    { position = xrOrientation.position
-    , matrix = convertMatToZUp xrOrientation.matrix
-    , inverseMatrix = convertMatToZUp xrOrientation.inverseMatrix
-    }
-
-
 renderXrFrame :
     ({ time : Effect.Time.Posix, xrView : XrView, inputs : List XrInput } -> List Entity)
     -> Effect.Task.Task FrontendOnly XrRenderError XrPose
@@ -495,7 +478,7 @@ renderXrFrame entities =
                             Effect.Internal.OtherEye ->
                                 OtherEye
                     , projectionMatrix = xrView.projectionMatrix
-                    , orientation = orientationToZUp xrView.orientation
+                    , viewMatrix = Mat4.mul xrView.viewMatrix zUpMat
                     }
             in
             entities
@@ -523,7 +506,7 @@ renderXrFrame entities =
                                             Effect.Internal.OtherEye ->
                                                 OtherEye
                                     , projectionMatrix = view.projectionMatrix
-                                    , orientation = orientationToZUp view.orientation
+                                    , viewMatrix = Mat4.mul view.viewMatrix zUpMat
                                     }
                                 )
                                 ok.views
@@ -554,16 +537,7 @@ inputFromInternal input =
 
             Effect.Internal.Unknown ->
                 Unknown
-    , orientation =
-        Maybe.map
-            (\a ->
-                { position = a.position
-                , matrix =
-                    Mat4.mul (Mat4.mul zUpMatInverse a.matrix) zUpInputMat
-                , inverseMatrix = Mat4.identity --Mat4.mul zUpMatInverse a.inverseMatrix
-                }
-            )
-            input.orientation
+    , matrix = Maybe.map (\a -> Mat4.mul (Mat4.mul zUpMatInverse a) zUpInputMat) input.matrix
     , mapping = input.mapping
     , buttons = input.buttons
     }
