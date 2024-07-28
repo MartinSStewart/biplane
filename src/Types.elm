@@ -83,6 +83,7 @@ type alias WaterVertex =
 
 type alias CloudVertex =
     { position : Vec3
+    , layer : Vec3
     }
 
 

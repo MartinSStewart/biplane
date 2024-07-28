@@ -37,6 +37,7 @@ import Obj.Decode
 import Point2d
 import Point3d exposing (Point3d)
 import Quantity exposing (Product, Quantity, Rate)
+import Random
 import TriangularMesh
 import Types exposing (..)
 import Unsafe
@@ -160,34 +161,51 @@ bayerTexture =
         |> Unsafe.assumeOk
 
 
+cloudTextureSize =
+    256
 
---cloudTexture : Effect.WebGL.Texture.Texture
---cloudTexture =
---    List.range 0 (cloudTextureSize * cloudTextureSize - 1)
---        |> List.map
---            (\index ->
---                let
---                    x =
---                        modBy cloudTextureSize index
---
---                    y =
---                        index // cloudTextureSize
---                in
---                Bytes.Encode.unsignedInt8 (modBy 256 (x + y))
---            )
---        |> Bytes.Encode.sequence
---        |> Bytes.Encode.encode
---        |> Effect.WebGL.Texture.loadBytesWith
---            { magnify = Effect.WebGL.Texture.linear
---            , minify = Effect.WebGL.Texture.linear
---            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
---            , verticalWrap = Effect.WebGL.Texture.clampToEdge
---            , flipY = False
---            , premultiplyAlpha = False
---            }
---            ( cloudTextureSize, cloudTextureSize )
---            Effect.WebGL.Texture.luminance
---        |> Unsafe.assumeOk
+
+cloudTexture : Effect.WebGL.Texture.Texture
+cloudTexture =
+    List.range 0 (cloudTextureSize * cloudTextureSize - 1)
+        |> List.concatMap
+            (\index ->
+                let
+                    x =
+                        modBy cloudTextureSize index
+
+                    y =
+                        index // cloudTextureSize
+
+                    halfSize =
+                        cloudTextureSize / 2
+
+                    centerDistance : Int
+                    centerDistance =
+                        sqrt ((toFloat x - halfSize) ^ 2 + (toFloat y - halfSize) ^ 2)
+                            |> (\a -> 256 - a * 2)
+                            |> clamp 0 255
+                            |> round
+                in
+                [ Bytes.Encode.unsignedInt8 255
+                , Bytes.Encode.unsignedInt8 255
+                , Bytes.Encode.unsignedInt8 255
+                , Bytes.Encode.unsignedInt8 centerDistance
+                ]
+            )
+        |> Bytes.Encode.sequence
+        |> Bytes.Encode.encode
+        |> Effect.WebGL.Texture.loadBytesWith
+            { magnify = Effect.WebGL.Texture.linear
+            , minify = Effect.WebGL.Texture.linear
+            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+            , flipY = False
+            , premultiplyAlpha = True
+            }
+            ( cloudTextureSize, cloudTextureSize )
+            Effect.WebGL.Texture.rgba
+        |> Unsafe.assumeOk
 
 
 update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -981,9 +999,6 @@ entities model =
                             cloudMesh
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
-                            , modelTransform =
-                                Mat4.makeTranslate3 0 0 (0.5 + Length.inMeters waterZ)
-                                    |> Mat4.scale3 1 1 0.2
                             , texture = texture
                             }
                         ]
@@ -1010,6 +1025,20 @@ premultipliedBlend =
 -- Mesh
 
 
+square : Mesh { position : Vec3, offset : Vec2 }
+square =
+    let
+        pos =
+            Vec3.vec3 2 0 0
+    in
+    [ { position = pos, offset = Vec2.vec2 -1 -1 }
+    , { position = pos, offset = Vec2.vec2 1 -1 }
+    , { position = pos, offset = Vec2.vec2 1 1 }
+    , { position = pos, offset = Vec2.vec2 -1 1 }
+    ]
+        |> quadsToMesh
+
+
 sunPosition =
     Vec3.vec3 0 0 500
 
@@ -1033,33 +1062,48 @@ sunMesh =
 
 cloudMesh : Mesh CloudVertex
 cloudMesh =
+    Random.step randomCloud (Random.initialSeed 123)
+        |> Tuple.first
+        |> List.concat
+        |> quadsToMesh
+
+
+randomCloud : Random.Generator (List (List CloudVertex))
+randomCloud =
+    Random.list
+        500
+        (Random.map5
+            singleCloud
+            (Random.float -10 10)
+            (Random.float -10 10)
+            (Random.float 0.5 1)
+            (Random.float 0.1 0.25)
+            (Random.float 0.2 1)
+        )
+
+
+singleCloud : Float -> Float -> Float -> Float -> Float -> List CloudVertex
+singleCloud x y bottomZ height size =
     let
-        start =
-            0
-
-        height =
-            1
-
         layers =
-            30
-
-        size =
-            1
+            round (70 * height)
     in
     List.range 0 (layers - 1)
         |> List.concatMap
             (\index ->
                 let
                     t =
-                        start + height * toFloat index / layers
+                        toFloat index / toFloat layers
+
+                    z =
+                        Length.inMeters waterZ + bottomZ + t * height
                 in
-                [ { position = Vec3.vec3 size 0 t }
-                , { position = Vec3.vec3 size size t }
-                , { position = Vec3.vec3 0 size t }
-                , { position = Vec3.vec3 0 0 t }
+                [ { position = Vec3.vec3 (x + size) y z, layer = Vec3.vec3 1 0 t }
+                , { position = Vec3.vec3 (x + size) (y + size) z, layer = Vec3.vec3 1 1 t }
+                , { position = Vec3.vec3 x (y + size) z, layer = Vec3.vec3 0 1 t }
+                , { position = Vec3.vec3 x y z, layer = Vec3.vec3 0 0 t }
                 ]
             )
-        |> quadsToMesh
 
 
 floorAxes : Mesh Vertex
@@ -1258,7 +1302,7 @@ type alias Uniforms =
 
 
 type alias CloudUniforms =
-    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, texture : Texture }
+    { perspective : Mat4, viewMatrix : Mat4, texture : Texture }
 
 
 
@@ -1397,36 +1441,36 @@ void main () {
     |]
 
 
-cloudVertexShader : Shader CloudVertex CloudUniforms { vPosition : Vec3 }
+cloudVertexShader : Shader CloudVertex CloudUniforms { vLayer : Vec3 }
 cloudVertexShader =
     [glsl|
 attribute vec3 position;
+attribute vec3 layer;
 
-uniform mat4 modelTransform;
 uniform mat4 viewMatrix;
 uniform mat4 perspective;
 
-varying vec3 vPosition;
+varying vec3 vLayer;
 
 void main(void) {
-    gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
-    vPosition = position;
+    gl_Position = perspective * viewMatrix * vec4(position, 1.0);
+    vLayer = layer;
 }
     |]
 
 
-cloudFragmentShader : Shader {} { u | texture : Texture } { vPosition : Vec3 }
+cloudFragmentShader : Shader {} { u | texture : Texture } { vLayer : Vec3 }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
-varying vec3 vPosition;
+varying vec3 vLayer;
 
 uniform sampler2D texture;
 
 void main(void) {
-    float a = texture2D(texture, vPosition.xy).x;
+    float a = texture2D(texture, vLayer.xy).x;
 
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0) * min(0.2, a - vPosition.z);
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0) * min(0.2, a - vLayer.z);
 }
     |]
 
@@ -1448,6 +1492,6 @@ flatFragmentShader =
 precision mediump float;
 
 void main(void) {
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    gl_FragColor = vec4(0.5, 0.6, 1.0, 1.0);
 }
     |]
