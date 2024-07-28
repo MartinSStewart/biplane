@@ -973,7 +973,7 @@ entities model =
             ++ (case model.cloudTexture of
                     LoadedTexture texture ->
                         [ WebGL.entityWith
-                            [ blend
+                            [ premultipliedBlend
                             , DepthTest.less { write = False, near = 0, far = 1 }
                             ]
                             cloudVertexShader
@@ -985,7 +985,6 @@ entities model =
                                 Mat4.makeTranslate3 0 0 (0.5 + Length.inMeters waterZ)
                                     |> Mat4.scale3 1 1 0.2
                             , texture = texture
-                            , bayerTexture = bayerTexture
                             }
                         ]
 
@@ -1000,6 +999,11 @@ entities model =
 blend : Setting
 blend =
     Blend.add Blend.srcAlpha Blend.oneMinusSrcAlpha
+
+
+premultipliedBlend : Setting
+premultipliedBlend =
+    Blend.add Blend.one Blend.oneMinusSrcAlpha
 
 
 
@@ -1254,7 +1258,7 @@ type alias Uniforms =
 
 
 type alias CloudUniforms =
-    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, texture : Texture, bayerTexture : Texture }
+    { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, texture : Texture }
 
 
 
@@ -1411,33 +1415,18 @@ void main(void) {
     |]
 
 
-cloudFragmentShader : Shader {} { u | texture : Texture, bayerTexture : Texture } { vPosition : Vec3 }
+cloudFragmentShader : Shader {} { u | texture : Texture } { vPosition : Vec3 }
 cloudFragmentShader =
     [glsl|
 precision mediump float;
 varying vec3 vPosition;
 
 uniform sampler2D texture;
-uniform sampler2D bayerTexture;
 
 void main(void) {
     float a = texture2D(texture, vPosition.xy).x;
 
-    float b = texture2D(bayerTexture, gl_FragCoord.xy / 8.0).x;
-
-    float z = mod(gl_FragCoord.x - 0.5, 2.0);
-
-    vec3 c =
-        z > 0.49 && z < 0.51
-            ? vec3(1.0, 0.0, 0.0)
-            : z > 0.99
-                ? vec3(0.0, 0.0, 1.0)
-                : z < 0.01
-                    ? vec3(0.0, 1.0, 1.0)
-                    : vec3(0.0, 1.0, 0.0);
-    //gl_FragColor = vec4(1.0, 1.0, 1.0, min(0.2, a - vPosition.z));
-    gl_FragColor = vec4(c, 1.0);
-
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0) * min(0.2, a - vPosition.z);
 }
     |]
 
