@@ -1,4 +1,4 @@
-module Font2 exposing (..)
+module Font2 exposing (Font, Glyph, decode)
 
 import Bytes exposing (Endianness(..))
 import Bytes.Decode exposing (Decoder)

@@ -6,7 +6,8 @@
         "vendored/ianmackenzie/elm-geometry/3.11.0/src",
         "vendored/ianmackenzie/elm-geometry-linear-algebra-interop/2.0.2/src",
         "vendored/ianmackenzie/elm-triangular-mesh/1.1.0/src",
-        "vendored/w0rm/elm-obj-file/1.2.1/src"
+        "vendored/w0rm/elm-obj-file/1.2.1/src",
+        "generated/Font.elm"
     ],
     "elm-version": "0.19.1",
     "dependencies": {

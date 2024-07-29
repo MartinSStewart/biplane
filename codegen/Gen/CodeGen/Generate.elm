@@ -3,6 +3,7 @@ port module Gen.CodeGen.Generate exposing
     , withFeedback, Error
     , File, Directory(..)
     , error, files, info
+    , fromBytes, onFailureSend, onSuccessSend
     )
 
 {-|
@@ -31,6 +32,7 @@ This is the low level API if you need more control over the generation process p
 
 -}
 
+import Bytes exposing (Bytes)
 import Dict exposing (Dict)
 import Json.Decode exposing (Decoder)
 import Json.Encode as Json
@@ -85,6 +87,23 @@ fromJson decoder f =
 -}
 fromText : (String -> List File) -> Program String () ()
 fromText f =
+    Platform.worker
+        { init =
+            \flags ->
+                ( ()
+                , files (f flags)
+                )
+        , update =
+            \_ model ->
+                ( model, Cmd.none )
+        , subscriptions = \_ -> Sub.none
+        }
+
+
+{-| Given the file passed in with `--flags-from` as String, produce a list of files as output.
+-}
+fromBytes : (Bytes -> List File) -> Program Bytes () ()
+fromBytes f =
     Platform.worker
         { init =
             \flags ->

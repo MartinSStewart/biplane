@@ -7,7 +7,6 @@ import Effect.Http
 import Effect.Time as Time
 import Effect.WebGL
 import Effect.WebGL.Texture exposing (Texture)
-import Font2 exposing (Font)
 import Frame3d exposing (Frame3d)
 import Length exposing (Meters)
 import Math.Vector2 exposing (Vec2)
