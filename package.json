@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "elm-codegen": "^0.5.3",
     "elm-format": "^0.8.7"
   }
 }

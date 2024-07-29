@@ -7,6 +7,7 @@ import Effect.Http
 import Effect.Time as Time
 import Effect.WebGL
 import Effect.WebGL.Texture exposing (Texture)
+import Font2 exposing (Font)
 import Frame3d exposing (Frame3d)
 import Length exposing (Meters)
 import Math.Vector2 exposing (Vec2)
@@ -30,8 +31,8 @@ type alias FrontendModel =
     , biplaneMesh : Effect.WebGL.Mesh Vertex
     , islandMesh : Effect.WebGL.Mesh Vertex
     , startTime : Time.Posix
-    , cloudTexture : TextureStatus
-    , waterTexture : TextureStatus
+    , cloudTexture : LoadStatus Effect.WebGL.Texture.Error Texture
+    , waterTexture : LoadStatus Effect.WebGL.Texture.Error Texture
     , bullets : List Bullet
     , bulletSplashes : List Splash
     , lastShot : Time.Posix
@@ -40,6 +41,7 @@ type alias FrontendModel =
     , plane : Frame3d Meters World { defines : PlaneLocal }
     , lagWarning : Time.Posix
     , boundaryCenter : Point2d Meters World
+    , fontTexture : LoadStatus Effect.WebGL.Texture.Error Texture
     }
 
 
@@ -62,10 +64,10 @@ type alias Bullet =
     }
 
 
-type TextureStatus
-    = LoadingTexture
-    | LoadedTexture Texture
-    | TextureError Effect.WebGL.Texture.Error
+type LoadStatus e a
+    = Loading
+    | Loaded a
+    | LoadError e
 
 
 type alias Vertex =
@@ -108,6 +110,7 @@ type FrontendMsg
     | GotStartTime Time.Posix
     | GotCloudTexture (Result Effect.WebGL.Texture.Error Texture)
     | GotWaterTexture (Result Effect.WebGL.Texture.Error Texture)
+    | GotFontTexture (Result Effect.WebGL.Texture.Error Texture)
 
 
 type ToBackend

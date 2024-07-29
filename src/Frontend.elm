@@ -81,8 +81,8 @@ init url key =
       , previousBoundary = Nothing
       , biplaneMesh = WebGL.triangleFan []
       , islandMesh = WebGL.triangleFan []
-      , cloudTexture = LoadingTexture
-      , waterTexture = LoadingTexture
+      , cloudTexture = Loading
+      , waterTexture = Loading
       , plane = Point3d.meters 0 0.5 1.5 |> Frame3d.atPoint
       , holdingHand = Nothing
       , bullets = []
@@ -90,6 +90,7 @@ init url key =
       , lastShot = Time.millisToPosix 0
       , lastShotWasOnLeft = True
       , lagWarning = Time.millisToPosix 0
+      , fontTexture = Loading
       }
     , Command.batch
         [ Effect.Http.get
@@ -111,6 +112,16 @@ init url key =
             }
             "/cloud-texture.png"
             |> Task.attempt GotCloudTexture
+        , Effect.WebGL.Texture.loadWith
+            { magnify = Effect.WebGL.Texture.nearest
+            , minify = Effect.WebGL.Texture.linearMipmapNearest
+            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+            , flipY = True
+            , premultiplyAlpha = True
+            }
+            "/dinProMedium.png"
+            |> Task.attempt GotFontTexture
         , Effect.WebGL.Texture.loadWith
             { magnify = Effect.WebGL.Texture.linear
             , minify = Effect.WebGL.Texture.linearMipmapLinear
@@ -344,10 +355,10 @@ update msg model =
                 | cloudTexture =
                     case result of
                         Ok texture ->
-                            LoadedTexture texture
+                            Loaded texture
 
                         Err error ->
-                            TextureError error
+                            LoadError error
               }
             , Command.none
             )
@@ -357,13 +368,79 @@ update msg model =
                 | waterTexture =
                     case result of
                         Ok texture ->
-                            LoadedTexture texture
+                            Loaded texture
 
                         Err error ->
-                            TextureError (Debug.log "water texture error" error)
+                            LoadError (Debug.log "water texture error" error)
               }
             , Command.none
             )
+
+        GotFontTexture result ->
+            ( { model
+                | fontTexture =
+                    case result of
+                        Ok texture ->
+                            Loaded texture
+
+                        Err error ->
+                            LoadError (Debug.log "font texture error" error)
+              }
+            , Command.none
+            )
+
+
+fontTextureWidth =
+    1024
+
+
+fontTextureHeight =
+    1024
+
+
+getGlyph : { a | xOffset : Int, yOffset : Int, width : Int, height : Int, x : Int, y : Int } -> List LabelVertex
+getGlyph glyph =
+    let
+        scaleAdjust =
+            1
+
+        x0 =
+            toFloat glyph.xOffset * scaleAdjust
+
+        y0 =
+            toFloat glyph.yOffset * scaleAdjust
+
+        x1 =
+            toFloat (glyph.xOffset + glyph.width) * scaleAdjust
+
+        y1 =
+            toFloat (glyph.yOffset + glyph.height) * scaleAdjust
+
+        texX0 =
+            toFloat glyph.x / fontTextureWidth
+
+        texY0 =
+            1 - toFloat glyph.y / fontTextureHeight
+
+        texX1 =
+            toFloat (glyph.x + glyph.width) / fontTextureWidth
+
+        texY1 =
+            1 - toFloat (glyph.y + glyph.height) / fontTextureHeight
+    in
+    [ { position = Vec3.vec3 x0 y0 1
+      , texCoord = Vec2.vec2 texX0 texY0
+      }
+    , { position = Vec3.vec3 x0 y1 1
+      , texCoord = Vec2.vec2 texX0 texY1
+      }
+    , { position = Vec3.vec3 x1 y1 1
+      , texCoord = Vec2.vec2 texX1 texY1
+      }
+    , { position = Vec3.vec3 x1 y0 1
+      , texCoord = Vec2.vec2 texX1 texY0
+      }
+    ]
 
 
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -906,6 +983,21 @@ entities model =
             , cameraPosition = viewPosition
             }
         ]
+            ++ (case model.fontTexture of
+                    Loaded fontTexture ->
+                        [ WebGL.entity
+                            labelVertexShader
+                            labelFragmentShader
+                            square
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.viewMatrix
+                            , texture = fontTexture
+                            }
+                        ]
+
+                    _ ->
+                        []
+               )
             ++ List.foldl
                 (\splash a ->
                     let
@@ -973,7 +1065,7 @@ entities model =
                 )
                 inputs
             ++ (case model.waterTexture of
-                    LoadedTexture texture ->
+                    Loaded texture ->
                         [ WebGL.entity
                             waterVertexShader
                             waterFragmentShader
@@ -989,7 +1081,7 @@ entities model =
                         []
                )
             ++ (case model.cloudTexture of
-                    LoadedTexture texture ->
+                    Loaded texture ->
                         [ WebGL.entityWith
                             [ premultipliedBlend
                             , DepthTest.less { write = False, near = 0, far = 1 }
@@ -1003,10 +1095,10 @@ entities model =
                             }
                         ]
 
-                    LoadingTexture ->
+                    Loading ->
                         []
 
-                    TextureError _ ->
+                    LoadError _ ->
                         []
                )
 
@@ -1025,16 +1117,16 @@ premultipliedBlend =
 -- Mesh
 
 
-square : Mesh { position : Vec3, offset : Vec2 }
+square : Mesh LabelVertex
 square =
     let
         pos =
             Vec3.vec3 2 0 0
     in
-    [ { position = pos, offset = Vec2.vec2 -1 -1 }
-    , { position = pos, offset = Vec2.vec2 1 -1 }
-    , { position = pos, offset = Vec2.vec2 1 1 }
-    , { position = pos, offset = Vec2.vec2 -1 1 }
+    [ { position = pos, texCoord = Vec2.vec2 0 0 }
+    , { position = pos, texCoord = Vec2.vec2 1 0 }
+    , { position = pos, texCoord = Vec2.vec2 1 1 }
+    , { position = pos, texCoord = Vec2.vec2 0 1 }
     ]
         |> quadsToMesh
 
@@ -1494,4 +1586,40 @@ precision mediump float;
 void main(void) {
     gl_FragColor = vec4(0.5, 0.6, 1.0, 1.0);
 }
+    |]
+
+
+type alias LabelVertex =
+    { position : Vec3, texCoord : Vec2 }
+
+
+labelVertexShader : Shader LabelVertex { a | viewMatrix : Mat4, perspective : Mat4 } { vTexCoord : Vec2 }
+labelVertexShader =
+    [glsl|
+attribute vec3 position;
+attribute vec2 texCoord;
+
+uniform mat4 viewMatrix;
+uniform mat4 perspective;
+
+varying vec2 vTexCoord;
+
+void main () {
+  gl_Position = perspective * viewMatrix * vec4(position, 1.0);
+  vTexCoord = texCoord;
+}
+
+|]
+
+
+labelFragmentShader : Shader {} { a | fontTexture : Texture } { vTexCoord : Vec2 }
+labelFragmentShader =
+    [glsl|
+        precision mediump float;
+        uniform sampler2D fontTexture;
+        varying vec2 vTexCoord;
+
+        void main () {
+            gl_FragColor = texture2D(fontTexture, vTexCoord);
+        }
     |]
