@@ -180,7 +180,7 @@ type XrStartError
 
 
 type alias XrStartData =
-    { boundary : Maybe (List Vec2) }
+    { boundary : Maybe (List Vec2), supportedFrameRates : List Int }
 
 
 type XrRenderError

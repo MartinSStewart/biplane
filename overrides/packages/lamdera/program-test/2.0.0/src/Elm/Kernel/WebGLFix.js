@@ -856,6 +856,15 @@ var xrGl = null;
 var xrReferenceSpace = null;
 var xrModel = null;
 var xrStartTime = 0;
+var xrLastUpdate = 0;
+
+//function _WebGLFix_setFrameRate(frameRate) {
+//    return __Scheduler_binding(function (callback) {
+//        session.updateTargetFrameRate( framerateList[0] ).then((a) => {
+//
+//        });
+//    }
+//}
 
 function _WebGLFix_requestXrStart(options) {
     return __Scheduler_binding(function (callback) {
@@ -902,6 +911,17 @@ function _WebGLFix_requestXrStart(options) {
                     // be displayed on the XRDevice.
                     session.updateRenderState({ baseLayer: new XRWebGLLayer(session, xrGl) });
 
+                    let xrStartData = {
+                        __$boundary : __Maybe_Nothing,
+                        __$supportedFrameRates :
+                            session.supportedFrameRates
+                                ? __List_fromArray(session.supportedFrameRates)
+                                : __List_fromArray([])
+                        };
+
+                    if (session.updateTargetFrameRate) {
+                        session.updateTargetFrameRate(120);
+                    }
 
                     session
                         .requestReferenceSpace('bounded-floor')
@@ -913,11 +933,8 @@ function _WebGLFix_requestXrStart(options) {
 
                             xrRender(xrModel);
 
-                            let xrStartData = { __$boundary : __Maybe_Nothing };
-
                             xrStartData.__$boundary = __Maybe_Just(__List_fromArray(xrReferenceSpace.boundsGeometry.map((p) => { return A2(__MJS_v2, p.x, -p.z); })));
                             callback(__Scheduler_succeed(xrStartData));
-
                         })
                         .catch(() => {
                             session
@@ -929,7 +946,6 @@ function _WebGLFix_requestXrStart(options) {
 
                                     xrRender(xrModel);
 
-                                    let xrStartData = { __$boundary : __Maybe_Nothing };
                                     callback(__Scheduler_succeed(xrStartData));
                                 });
                         });
@@ -996,10 +1012,9 @@ function _WebGLFix_renderXrFrame(entities) {
         if (xrSession) {
             function notStarted(a) { callback(__Scheduler_fail(__EI_XrSessionNotStarted)); }
 
-            xrSession.addEventListener('end', notStarted);
+            xrSession.addEventListener('end', notStarted );
 
             xrSession.requestAnimationFrame((time, frame) => {
-
                 let pose = frame.getViewerPose(xrReferenceSpace);
 
                 xrSession.removeEventListener('end', notStarted);

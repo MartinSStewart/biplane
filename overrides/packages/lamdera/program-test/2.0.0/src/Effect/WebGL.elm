@@ -368,7 +368,7 @@ type XrStartError
 
 
 type alias XrStartData =
-    { boundary : Maybe (List Vec2) }
+    { boundary : Maybe (List Vec2), supportedFrameRates : List Int }
 
 
 requestXrStart : List WebGLFix.Option -> Effect.Task.Task FrontendOnly XrStartError XrStartData

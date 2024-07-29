@@ -1470,7 +1470,7 @@ uniform sampler2D texture;
 void main(void) {
     float a = texture2D(texture, vLayer.xy).x;
 
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0) * min(0.2, a - vLayer.z);
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0) * min(0.4, a - vLayer.z);
 }
     |]
 
