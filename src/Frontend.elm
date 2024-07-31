@@ -5,6 +5,7 @@ import Array2D
 import BayerMatrix
 import Browser exposing (UrlRequest(..))
 import Bytes.Encode
+import Dict
 import Direction3d exposing (Direction3d)
 import Duration exposing (Duration, Seconds)
 import Effect.Browser.Events
@@ -18,6 +19,7 @@ import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
 import Effect.WebGL.Texture exposing (Texture)
+import Font
 import Frame3d exposing (Frame3d)
 import Geometry.Interop.LinearAlgebra.Frame3d as Frame3d
 import Geometry.Interop.LinearAlgebra.Point2d as Point2d
@@ -396,6 +398,14 @@ fontTextureWidth =
 
 fontTextureHeight =
     1024
+
+
+someText : Mesh LabelVertex
+someText =
+    String.toList "Hello world!"
+        |> List.filterMap (\char -> Dict.get char Font.font.glyphs |> Maybe.map getGlyph)
+        |> List.concat
+        |> quadsToMesh
 
 
 getGlyph : { a | xOffset : Int, yOffset : Int, width : Int, height : Int, x : Int, y : Int } -> List LabelVertex
