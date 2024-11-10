@@ -286,8 +286,16 @@ fontTextureHeight =
     1024
 
 
-someText : Mesh LabelVertex
-someText =
+helloWorld =
+    textMesh (Vector3d.meters 0 0 -1) "Hello World"
+
+
+textMesh : Vector3d Meters World -> String -> Mesh LabelVertex
+textMesh position text =
+    let
+        pos =
+            Vector3d.toMeters position
+    in
     String.foldl
         (\char ( vertices, xOffset ) ->
             case Dict.get char Font.font.glyphs of
@@ -301,16 +309,16 @@ someText =
                                 0.002
 
                             x0 =
-                                toFloat (glyph.xOffset + xOffset) * scaleAdjust
+                                toFloat (glyph.xOffset + xOffset) * scaleAdjust + pos.x
 
                             y0 =
-                                toFloat glyph.yOffset * scaleAdjust
+                                -(toFloat glyph.yOffset * scaleAdjust) + pos.y
 
                             x1 =
-                                toFloat (glyph.xOffset + glyph.width + xOffset) * scaleAdjust
+                                toFloat (glyph.xOffset + glyph.width + xOffset) * scaleAdjust + pos.x
 
                             y1 =
-                                toFloat (glyph.yOffset + glyph.height) * scaleAdjust
+                                -(toFloat (glyph.yOffset + glyph.height) * scaleAdjust) + pos.y
 
                             texX0 =
                                 toFloat glyph.x / fontTextureWidth
@@ -324,16 +332,16 @@ someText =
                             texY1 =
                                 1 - toFloat (glyph.y + glyph.height) / fontTextureHeight
                         in
-                        ( [ { position = Vec3.vec3 x0 y0 2
+                        ( [ { position = Vec3.vec3 x0 y0 pos.z
                             , texCoord = Vec2.vec2 texX0 texY0
                             }
-                          , { position = Vec3.vec3 x0 y1 2
+                          , { position = Vec3.vec3 x0 y1 pos.z
                             , texCoord = Vec2.vec2 texX0 texY1
                             }
-                          , { position = Vec3.vec3 x1 y1 2
+                          , { position = Vec3.vec3 x1 y1 pos.z
                             , texCoord = Vec2.vec2 texX1 texY1
                             }
-                          , { position = Vec3.vec3 x1 y0 2
+                          , { position = Vec3.vec3 x1 y0 pos.z
                             , texCoord = Vec2.vec2 texX1 texY0
                             }
                           ]
@@ -345,7 +353,7 @@ someText =
                     ( vertices, xOffset )
         )
         ( [], 0 )
-        "Hello world!"
+        text
         |> Tuple.first
         |> quadsToMesh
 
@@ -644,7 +652,17 @@ entities model =
                             ]
                             labelVertexShader
                             labelFragmentShader
-                            someText
+                            helloWorld
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = Mat4.identity --xrView.viewMatrix
+                            , fontTexture = fontTexture
+                            }
+                        , WebGL.entityWith
+                            [ premultipliedBlend
+                            ]
+                            labelVertexShader
+                            labelFragmentShader
+                            helloWorld
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
                             , fontTexture = fontTexture
