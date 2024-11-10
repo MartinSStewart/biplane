@@ -288,55 +288,66 @@ fontTextureHeight =
 
 someText : Mesh LabelVertex
 someText =
-    String.toList "Hello world!"
-        |> List.filterMap (\char -> Dict.get char Font.font.glyphs |> Maybe.map getGlyph)
-        |> List.concat
+    String.foldl
+        (\char ( vertices, xOffset ) ->
+            case Dict.get char Font.font.glyphs of
+                Just glyph ->
+                    if char == ' ' then
+                        ( vertices, xOffset + glyph.xAdvance )
+
+                    else
+                        let
+                            scaleAdjust =
+                                0.002
+
+                            x0 =
+                                toFloat (glyph.xOffset + xOffset) * scaleAdjust
+
+                            y0 =
+                                toFloat glyph.yOffset * scaleAdjust
+
+                            x1 =
+                                toFloat (glyph.xOffset + glyph.width + xOffset) * scaleAdjust
+
+                            y1 =
+                                toFloat (glyph.yOffset + glyph.height) * scaleAdjust
+
+                            texX0 =
+                                toFloat glyph.x / fontTextureWidth
+
+                            texY0 =
+                                1 - toFloat glyph.y / fontTextureHeight
+
+                            texX1 =
+                                toFloat (glyph.x + glyph.width) / fontTextureWidth
+
+                            texY1 =
+                                1 - toFloat (glyph.y + glyph.height) / fontTextureHeight
+                        in
+                        ( [ { position = Vec3.vec3 x0 y0 2
+                            , texCoord = Vec2.vec2 texX0 texY0
+                            }
+                          , { position = Vec3.vec3 x0 y1 2
+                            , texCoord = Vec2.vec2 texX0 texY1
+                            }
+                          , { position = Vec3.vec3 x1 y1 2
+                            , texCoord = Vec2.vec2 texX1 texY1
+                            }
+                          , { position = Vec3.vec3 x1 y0 2
+                            , texCoord = Vec2.vec2 texX1 texY0
+                            }
+                          ]
+                            ++ vertices
+                        , xOffset + glyph.xAdvance
+                        )
+
+                Nothing ->
+                    ( vertices, xOffset )
+        )
+        ( [], 0 )
+        "Hello world!"
+        |> Tuple.first
         |> quadsToMesh
-
-
-getGlyph : { a | xOffset : Int, yOffset : Int, width : Int, height : Int, x : Int, y : Int } -> List LabelVertex
-getGlyph glyph =
-    let
-        scaleAdjust =
-            1
-
-        x0 =
-            toFloat glyph.xOffset * scaleAdjust
-
-        y0 =
-            toFloat glyph.yOffset * scaleAdjust
-
-        x1 =
-            toFloat (glyph.xOffset + glyph.width) * scaleAdjust
-
-        y1 =
-            toFloat (glyph.yOffset + glyph.height) * scaleAdjust
-
-        texX0 =
-            toFloat glyph.x / fontTextureWidth
-
-        texY0 =
-            1 - toFloat glyph.y / fontTextureHeight
-
-        texX1 =
-            toFloat (glyph.x + glyph.width) / fontTextureWidth
-
-        texY1 =
-            1 - toFloat (glyph.y + glyph.height) / fontTextureHeight
-    in
-    [ { position = Vec3.vec3 x0 y0 1
-      , texCoord = Vec2.vec2 texX0 texY0
-      }
-    , { position = Vec3.vec3 x0 y1 1
-      , texCoord = Vec2.vec2 texX0 texY1
-      }
-    , { position = Vec3.vec3 x1 y1 1
-      , texCoord = Vec2.vec2 texX1 texY1
-      }
-    , { position = Vec3.vec3 x1 y0 1
-      , texCoord = Vec2.vec2 texX1 texY0
-      }
-    ]
 
 
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -628,10 +639,12 @@ entities model =
         ]
             ++ (case model.fontTexture of
                     Loaded fontTexture ->
-                        [ WebGL.entity
+                        [ WebGL.entityWith
+                            [ premultipliedBlend
+                            ]
                             labelVertexShader
                             labelFragmentShader
-                            square
+                            someText
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
                             , fontTexture = fontTexture
@@ -722,69 +735,6 @@ square =
 
 sunPosition =
     Vec3.vec3 0 0 500
-
-
-sunMesh : Mesh Vertex
-sunMesh =
-    let
-        size =
-            100
-
-        color =
-            Vec3.vec3 1 1 1
-    in
-    [ { position = Vec3.vec3 size -size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 size size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 -size size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 -size -size 0 |> Vec3.add sunPosition, color = color, normal = zNormal, shininess = 20 }
-    ]
-        |> quadsToMesh
-
-
-cloudMesh : Mesh CloudVertex
-cloudMesh =
-    Random.step randomCloud (Random.initialSeed 123)
-        |> Tuple.first
-        |> List.concat
-        |> quadsToMesh
-
-
-randomCloud : Random.Generator (List (List CloudVertex))
-randomCloud =
-    Random.list
-        500
-        (Random.map5
-            singleCloud
-            (Random.float -10 10)
-            (Random.float -10 10)
-            (Random.float 0.5 1)
-            (Random.float 0.1 0.25)
-            (Random.float 0.2 1)
-        )
-
-
-singleCloud : Float -> Float -> Float -> Float -> Float -> List CloudVertex
-singleCloud x y bottomZ height size =
-    let
-        layers =
-            round (70 * height)
-    in
-    List.range 0 (layers - 1)
-        |> List.concatMap
-            (\index ->
-                let
-                    t =
-                        toFloat index / toFloat layers
-
-                    z =
-                        Length.inMeters waterZ + bottomZ + t * height
-                in
-                [ { position = Vec3.vec3 (x + size) y z, layer = Vec3.vec3 1 0 t }
-                , { position = Vec3.vec3 (x + size) (y + size) z, layer = Vec3.vec3 1 1 t }
-                , { position = Vec3.vec3 x (y + size) z, layer = Vec3.vec3 0 1 t }
-                , { position = Vec3.vec3 x y z, layer = Vec3.vec3 0 0 t }
-                ]
-            )
 
 
 floorAxes : Mesh Vertex
