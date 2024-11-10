@@ -1001,7 +1001,7 @@ entities model =
                             square
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
-                            , texture = fontTexture
+                            , fontTexture = fontTexture
                             }
                         ]
 

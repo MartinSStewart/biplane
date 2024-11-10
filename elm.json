@@ -7,7 +7,7 @@
         "vendored/ianmackenzie/elm-geometry-linear-algebra-interop/2.0.2/src",
         "vendored/ianmackenzie/elm-triangular-mesh/1.1.0/src",
         "vendored/w0rm/elm-obj-file/1.2.1/src",
-        "generated/Font.elm"
+        "generated"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
@@ -29,8 +29,9 @@
             "ianmackenzie/elm-units-interval": "3.2.0",
             "lamdera/codecs": "1.0.0",
             "lamdera/core": "1.0.0",
-            "lamdera/program-test": "2.0.0",
-            "tortus/elm-array-2d": "2.1.2"
+            "lamdera/program-test": "3.0.0",
+            "tortus/elm-array-2d": "2.1.2",
+            "lamdera/containers": "1.0.0"
         },
         "indirect": {
             "danfishgold/base64-bytes": "1.1.0",
