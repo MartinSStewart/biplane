@@ -446,11 +446,6 @@ gravity =
         (Quantity.rate (Quantity.rate (Length.meters -3) Duration.second) Duration.second)
 
 
-bulletSpeed : Quantity Float (Rate Meters Seconds)
-bulletSpeed =
-    Quantity.rate (Length.meters 15) Duration.second
-
-
 mat4ToFrame3d : Mat4 -> Frame3d u c d
 mat4ToFrame3d mat4 =
     let
@@ -599,108 +594,12 @@ view model =
     }
 
 
-worldScaleMat =
-    Mat4.makeScale3 worldScale worldScale worldScale
-
-
 worldScale =
     0.01
 
 
-bulletColor =
-    Vec3.vec3 1 1 0.5
-
-
 zNormal =
     Vec3.vec3 0 0 1
-
-
-bulletsMesh : List Bullet -> Mesh Vertex
-bulletsMesh bullets =
-    let
-        vertices =
-            List.foldl
-                (\bullet quads ->
-                    case Vector3d.direction bullet.velocity of
-                        Just dir ->
-                            let
-                                vDir : Vector3d Meters World
-                                vDir =
-                                    Vector3d.for (Duration.milliseconds 8) bullet.velocity
-
-                                ( d1, d2 ) =
-                                    Direction3d.perpendicularBasis dir
-
-                                v1 =
-                                    Direction3d.toVector d1 |> Vector3d.scaleBy 0.002 |> Vector3d.unwrap |> Vector3d.unsafe
-
-                                v2 =
-                                    Direction3d.toVector d2 |> Vector3d.scaleBy 0.002 |> Vector3d.unwrap |> Vector3d.unsafe
-
-                                p1 =
-                                    Point3d.translateBy v1 bullet.position
-
-                                p2 =
-                                    Point3d.translateBy v2 bullet.position
-
-                                p3 =
-                                    Point3d.translateBy (Vector3d.reverse v1) bullet.position
-
-                                p4 =
-                                    Point3d.translateBy (Vector3d.reverse v2) bullet.position
-                            in
-                            [ -- Bullet trail tail
-                              { position = Point3d.toVec3 p1, color = bulletColor, normal = zNormal, shininess = 20 }
-                            , { position = Point3d.toVec3 p2, color = bulletColor, normal = zNormal, shininess = 20 }
-                            , { position = Point3d.toVec3 p3, color = bulletColor, normal = zNormal, shininess = 20 }
-                            , { position = Point3d.toVec3 p4, color = bulletColor, normal = zNormal, shininess = 20 }
-                            , -- Bullet trail head
-                              { position = Point3d.translateBy vDir p1 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
-                            , { position = Point3d.translateBy vDir p2 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
-                            , { position = Point3d.translateBy vDir p3 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
-                            , { position = Point3d.translateBy vDir p4 |> Point3d.toVec3, color = bulletColor, normal = zNormal, shininess = 20 }
-                            ]
-                                ++ quads
-
-                        Nothing ->
-                            quads
-                )
-                []
-                bullets
-
-        indices2 : List ( Int, Int, Int )
-        indices2 =
-            List.foldl
-                (\_ { i, indices } ->
-                    { i = i + 8
-                    , indices =
-                        [ --tail quad
-                          ( i, i + 1, i + 2 )
-                        , ( i + 2, i + 3, i )
-                        , -- head quad
-                          ( i + 4, i + 5, i + 6 )
-                        , ( i + 6, i + 7, i + 4 )
-                        , -- side 1
-                          ( i, i + 4, i + 1 )
-                        , ( i + 1, i + 5, i + 4 )
-                        , -- side 2
-                          ( i + 1, i + 5, i + 6 )
-                        , ( i + 1, i + 6, i + 2 )
-                        , -- side 3
-                          ( i + 2, i + 6, i + 3 )
-                        , ( i + 6, i + 7, i + 3 )
-                        , -- side 4
-                          ( i + 7, i + 3, i + 4 )
-                        , ( i + 4, i, i + 3 )
-                        ]
-                            ++ indices
-                    }
-                )
-                { i = 0, indices = [] }
-                bullets
-                |> .indices
-    in
-    WebGL.indexedTriangles vertices indices2
 
 
 clearScreen =
@@ -720,43 +619,12 @@ clearScreen =
 
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model =
-    let
-        islandPos =
-            Point2d.unwrap model.boundaryCenter
-    in
     \{ time, xrView, inputs } ->
         let
             viewPosition =
                 mat4ToPoint3d xrView.viewMatrix |> Point3d.toVec3
         in
         [ clearScreen
-        , WebGL.entity
-            vertexShader
-            fragmentShader
-            model.boundaryMesh
-            { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.viewMatrix
-            , modelTransform = Mat4.identity
-            , cameraPosition = viewPosition
-            }
-        , WebGL.entity
-            vertexShader
-            fragmentShader
-            sunMesh
-            { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.viewMatrix
-            , modelTransform = Mat4.identity
-            , cameraPosition = viewPosition
-            }
-        , WebGL.entity
-            vertexShader
-            fragmentShader
-            floorAxes
-            { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.viewMatrix
-            , modelTransform = Mat4.identity
-            , cameraPosition = viewPosition
-            }
         ]
             ++ (case model.fontTexture of
                     Loaded fontTexture ->
@@ -767,6 +635,24 @@ entities model =
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
                             , fontTexture = fontTexture
+                            }
+                        , WebGL.entity
+                            vertexShader
+                            fragmentShader
+                            model.boundaryMesh
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.viewMatrix
+                            , modelTransform = Mat4.identity
+                            , cameraPosition = viewPosition
+                            }
+                        , WebGL.entity
+                            vertexShader
+                            fragmentShader
+                            floorAxes
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.viewMatrix
+                            , modelTransform = Mat4.identity
+                            , cameraPosition = viewPosition
                             }
                         ]
 
@@ -826,14 +712,10 @@ premultipliedBlend =
 
 square : Mesh LabelVertex
 square =
-    let
-        pos =
-            Vec3.vec3 2 0 0
-    in
-    [ { position = pos, texCoord = Vec2.vec2 0 0 }
-    , { position = pos, texCoord = Vec2.vec2 1 0 }
-    , { position = pos, texCoord = Vec2.vec2 1 1 }
-    , { position = pos, texCoord = Vec2.vec2 0 1 }
+    [ { position = Vec3.vec3 2 0 0, texCoord = Vec2.vec2 0 0 }
+    , { position = Vec3.vec3 2 2 0, texCoord = Vec2.vec2 1 0 }
+    , { position = Vec3.vec3 0 2 0, texCoord = Vec2.vec2 1 1 }
+    , { position = Vec3.vec3 0 0 0, texCoord = Vec2.vec2 0 1 }
     ]
         |> quadsToMesh
 
