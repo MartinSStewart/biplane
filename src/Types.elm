@@ -27,17 +27,7 @@ type alias FrontendModel =
     , isInVr : Bool
     , boundaryMesh : Effect.WebGL.Mesh Vertex
     , previousBoundary : Maybe (List Vec2)
-    , biplaneMesh : Effect.WebGL.Mesh Vertex
-    , islandMesh : Effect.WebGL.Mesh Vertex
     , startTime : Time.Posix
-    , cloudTexture : LoadStatus Effect.WebGL.Texture.Error Texture
-    , waterTexture : LoadStatus Effect.WebGL.Texture.Error Texture
-    , bullets : List Bullet
-    , bulletSplashes : List Splash
-    , lastShot : Time.Posix
-    , lastShotWasOnLeft : Bool
-    , holdingHand : Maybe Int
-    , plane : Frame3d Meters World { defines : PlaneLocal }
     , lagWarning : Time.Posix
     , boundaryCenter : Point2d Meters World
     , fontTexture : LoadStatus Effect.WebGL.Texture.Error Texture
@@ -103,12 +93,8 @@ type FrontendMsg
     | RenderedXrFrame (Result Effect.WebGL.XrRenderError Effect.WebGL.XrPose)
     | KeyDown String
     | EndedXrSession
-    | GotBiplaneObj (Result Effect.Http.Error (TriangularMesh { position : Point3d Meters ObjCoordinates, normal : Vector3d Unitless ObjCoordinates }))
-    | GotIslandObj (Result Effect.Http.Error (TriangularMesh { position : Point3d Meters ObjCoordinates, normal : Vector3d Unitless ObjCoordinates }))
     | TriggeredEndXrSession
     | GotStartTime Time.Posix
-    | GotCloudTexture (Result Effect.WebGL.Texture.Error Texture)
-    | GotWaterTexture (Result Effect.WebGL.Texture.Error Texture)
     | GotFontTexture (Result Effect.WebGL.Texture.Error Texture)
 
 

@@ -81,39 +81,11 @@ init url key =
       , boundaryMesh = WebGL.triangleFan []
       , boundaryCenter = Point2d.origin
       , previousBoundary = Nothing
-      , biplaneMesh = WebGL.triangleFan []
-      , islandMesh = WebGL.triangleFan []
-      , cloudTexture = Loading
-      , waterTexture = Loading
-      , plane = Point3d.meters 0 0.5 1.5 |> Frame3d.atPoint
-      , holdingHand = Nothing
-      , bullets = []
-      , bulletSplashes = []
-      , lastShot = Time.millisToPosix 0
-      , lastShotWasOnLeft = True
       , lagWarning = Time.millisToPosix 0
       , fontTexture = Loading
       }
     , Command.batch
-        [ Effect.Http.get
-            { url = "/biplane.obj"
-            , expect = Obj.Decode.expectObj GotBiplaneObj Length.meters Obj.Decode.faces
-            }
-        , Effect.Http.get
-            { url = "/island.obj"
-            , expect = Obj.Decode.expectObj GotIslandObj Length.meters Obj.Decode.faces
-            }
-        , Time.now |> Task.perform GotStartTime
-        , Effect.WebGL.Texture.loadWith
-            { magnify = Effect.WebGL.Texture.linear
-            , minify = Effect.WebGL.Texture.linear
-            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-            , verticalWrap = Effect.WebGL.Texture.clampToEdge
-            , flipY = False
-            , premultiplyAlpha = False
-            }
-            "/cloud-texture.png"
-            |> Task.attempt GotCloudTexture
+        [ Time.now |> Task.perform GotStartTime
         , Effect.WebGL.Texture.loadWith
             { magnify = Effect.WebGL.Texture.nearest
             , minify = Effect.WebGL.Texture.linearMipmapNearest
@@ -124,16 +96,6 @@ init url key =
             }
             "/dinProMedium.png"
             |> Task.attempt GotFontTexture
-        , Effect.WebGL.Texture.loadWith
-            { magnify = Effect.WebGL.Texture.linear
-            , minify = Effect.WebGL.Texture.linearMipmapLinear
-            , horizontalWrap = Effect.WebGL.Texture.repeat
-            , verticalWrap = Effect.WebGL.Texture.repeat
-            , flipY = False
-            , premultiplyAlpha = False
-            }
-            "/ocean-texture.png"
-            |> Task.attempt GotWaterTexture
         ]
     )
 
@@ -296,87 +258,11 @@ update msg model =
         EndedXrSession ->
             ( model, Command.none )
 
-        GotBiplaneObj result ->
-            case result of
-                Ok mesh2 ->
-                    ( { model
-                        | biplaneMesh =
-                            WebGL.indexedTriangles
-                                (TriangularMesh.vertices mesh2
-                                    |> Array.toList
-                                    |> List.map
-                                        (\point ->
-                                            { position = Point3d.toVec3 point.position
-                                            , color = Vec3.vec3 0.8 0.8 0
-                                            , normal = Vector3d.toVec3 point.normal
-                                            , shininess = 20
-                                            }
-                                        )
-                                )
-                                (TriangularMesh.faceIndices mesh2)
-                      }
-                    , Command.none
-                    )
-
-                Err error ->
-                    ( model, Command.none )
-
-        GotIslandObj result ->
-            case result of
-                Ok mesh2 ->
-                    ( { model
-                        | islandMesh =
-                            WebGL.indexedTriangles
-                                (TriangularMesh.vertices mesh2
-                                    |> Array.toList
-                                    |> List.map
-                                        (\point ->
-                                            { position = Point3d.toVec3 point.position
-                                            , color = Vec3.vec3 0.6 0.6 0.2
-                                            , normal = Vector3d.toVec3 point.normal
-                                            , shininess = 2
-                                            }
-                                        )
-                                )
-                                (TriangularMesh.faceIndices mesh2)
-                      }
-                    , Command.none
-                    )
-
-                Err error ->
-                    ( model, Command.none )
-
         TriggeredEndXrSession ->
             ( model, Command.none )
 
         GotStartTime startTime ->
             ( { model | startTime = startTime }, Command.none )
-
-        GotCloudTexture result ->
-            ( { model
-                | cloudTexture =
-                    case result of
-                        Ok texture ->
-                            Loaded texture
-
-                        Err error ->
-                            LoadError error
-              }
-            , Command.none
-            )
-
-        GotWaterTexture result ->
-            ( { model
-                | waterTexture =
-                    case result of
-                        Ok texture ->
-                            Loaded texture
-
-                        Err error ->
-                            LoadError (Debug.log "water texture error" error)
-              }
-            , Command.none
-            )
 
         GotFontTexture result ->
             ( { model
@@ -456,10 +342,6 @@ getGlyph glyph =
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 vrUpdate pose model =
     let
-        maybeInput : Maybe WebGL.XrInput
-        maybeInput =
-            Maybe.andThen (\index -> List.Extra.getAt index pose.inputs) model.holdingHand
-
         grabbed : Maybe Int
         grabbed =
             List.Extra.findIndex
@@ -473,82 +355,37 @@ vrUpdate pose model =
                 )
                 pose.inputs
 
-        isShooting : Bool
-        isShooting =
-            case maybeInput of
-                Just input ->
-                    case List.Extra.getAt 0 input.buttons of
-                        Just button ->
-                            if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 100) then
-                                False
-
-                            else
-                                button.value > 0.5
-
-                        Nothing ->
-                            False
-
-                Nothing ->
-                    False
-
-        newFrame : Frame3d Meters World { defines : PlaneLocal }
-        newFrame =
-            case Maybe.andThen .matrix maybeInput of
-                Just matrix ->
-                    mat4ToFrame3d matrix
-
-                Nothing ->
-                    model.plane
-
+        --isShooting : Bool
+        --isShooting =
+        --    case maybeInput of
+        --        Just input ->
+        --            case List.Extra.getAt 0 input.buttons of
+        --                Just button ->
+        --                    if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 100) then
+        --                        False
+        --
+        --                    else
+        --                        button.value > 0.5
+        --
+        --                Nothing ->
+        --                    False
+        --
+        --        Nothing ->
+        --            False
+        --
+        --newFrame : Frame3d Meters World { defines : PlaneLocal }
+        --newFrame =
+        --    case Maybe.andThen .matrix maybeInput of
+        --        Just matrix ->
+        --            mat4ToFrame3d matrix
+        --
+        --        Nothing ->
+        --            model.plane
         elapsedTime =
             Duration.from model.lastVrUpdate pose.time
 
         sameBoundary =
             model.previousBoundary == pose.boundary
-
-        ( bullets, splashes ) =
-            List.foldl
-                (\bullet (( bullets2, splashes2 ) as tuple) ->
-                    if Duration.from bullet.firedAt pose.time |> Quantity.lessThan (Duration.seconds 2) then
-                        let
-                            p =
-                                Point3d.translateBy (Vector3d.for elapsedTime bullet.velocity) bullet.position
-                        in
-                        if Point3d.zCoordinate p |> Quantity.lessThan waterZ then
-                            let
-                                end : { x : Float, y : Float, z : Float }
-                                end =
-                                    Point3d.toMeters p
-
-                                start : { x : Float, y : Float, z : Float }
-                                start =
-                                    Point3d.toMeters bullet.position
-
-                                t : Float
-                                t =
-                                    (Length.inMeters waterZ - start.z) / (end.z - start.z)
-                            in
-                            ( bullets2
-                            , { position = Point2d.meters (t * (end.x - start.x) + start.x) (t * (end.y - start.y) + start.y)
-                              , createdAt = pose.time
-                              }
-                                :: splashes2
-                            )
-
-                        else
-                            ( { position = p
-                              , velocity = Vector3d.for elapsedTime gravity |> Vector3d.plus bullet.velocity
-                              , firedAt = bullet.firedAt
-                              }
-                                :: bullets2
-                            , splashes2
-                            )
-
-                    else
-                        tuple
-                )
-                ( [], model.bulletSplashes )
-                model.bullets
     in
     ( { model
         | time = pose.time
@@ -570,46 +407,6 @@ vrUpdate pose model =
 
                     _ ->
                         model.boundaryCenter
-        , bullets =
-            if isShooting then
-                { position =
-                    Frame3d.translateAlongOwn
-                        Frame3d.xAxis
-                        (Quantity.multiplyBy
-                            (if model.lastShotWasOnLeft then
-                                -worldScale
-
-                             else
-                                worldScale
-                            )
-                            Length.meter
-                        )
-                        newFrame
-                        |> Frame3d.originPoint
-                , velocity = Vector3d.withLength bulletSpeed (Frame3d.yDirection newFrame)
-                , firedAt = pose.time
-                }
-                    :: bullets
-
-            else
-                bullets
-        , bulletSplashes =
-            List.filter
-                (\splash -> Duration.from splash.createdAt pose.time |> Quantity.lessThan splashAnimDuration)
-                splashes
-        , lastShot =
-            if isShooting then
-                pose.time
-
-            else
-                model.lastShot
-        , lastShotWasOnLeft =
-            if isShooting then
-                not model.lastShotWasOnLeft
-
-            else
-                model.lastShotWasOnLeft
-        , plane = newFrame
         , lastVrUpdate = pose.time
         , lagWarning =
             if elapsedTime |> Quantity.greaterThan (Duration.milliseconds 30) then
@@ -617,7 +414,6 @@ vrUpdate pose model =
 
             else
                 model.lagWarning
-        , holdingHand = grabbed
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model)
@@ -925,9 +721,6 @@ clearScreen =
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
 entities model =
     let
-        bullets =
-            bulletsMesh model.bullets
-
         islandPos =
             Point2d.unwrap model.boundaryCenter
     in
@@ -949,44 +742,16 @@ entities model =
         , WebGL.entity
             vertexShader
             fragmentShader
-            model.islandMesh
-            { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.viewMatrix
-            , modelTransform = Mat4.mul (Mat4.makeTranslate3 islandPos.x islandPos.y (Length.inMeters waterZ)) worldScaleMat
-            , cameraPosition = viewPosition
-            }
-        , WebGL.entity
-            vertexShader
-            fragmentShader
             sunMesh
             { perspective = xrView.projectionMatrix
             , viewMatrix = xrView.viewMatrix
             , modelTransform = Mat4.identity
             , cameraPosition = viewPosition
             }
-
-        --, WebGL.entity
-        --    vertexShader
-        --    fragmentShader
-        --    floorAxes
-        --    { perspective = xrView.projectionMatrix
-        --    , viewMatrix = xrView.viewMatrix
-        --    , modelTransform = Mat4.identity
-        --    , cameraPosition = viewPosition
-        --    }
         , WebGL.entity
             vertexShader
             fragmentShader
-            model.biplaneMesh
-            { perspective = xrView.projectionMatrix
-            , viewMatrix = xrView.viewMatrix
-            , modelTransform = Mat4.mul (Frame3d.toMat4 model.plane) worldScaleMat
-            , cameraPosition = viewPosition
-            }
-        , WebGL.entity
-            vertexShader
-            fragmentShader
-            bullets
+            floorAxes
             { perspective = xrView.projectionMatrix
             , viewMatrix = xrView.viewMatrix
             , modelTransform = Mat4.identity
@@ -1008,37 +773,6 @@ entities model =
                     _ ->
                         []
                )
-            ++ List.foldl
-                (\splash a ->
-                    let
-                        splashPos =
-                            Point2d.toMeters splash.position
-
-                        elapsedTime =
-                            Duration.from splash.createdAt time
-
-                        frame : Int
-                        frame =
-                            Quantity.ratio elapsedTime splashAnimDuration * splashAnimFrameCount |> floor
-                    in
-                    case Array.get frame splashFrames of
-                        Just mesh ->
-                            WebGL.entity
-                                vertexShader
-                                fragmentShader
-                                mesh
-                                { perspective = xrView.projectionMatrix
-                                , viewMatrix = xrView.viewMatrix
-                                , modelTransform = Mat4.makeTranslate3 splashPos.x splashPos.y (Length.inMeters waterZ)
-                                , cameraPosition = viewPosition
-                                }
-                                :: a
-
-                        Nothing ->
-                            a
-                )
-                []
-                model.bulletSplashes
             ++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
                     [ WebGL.entityWith
                         []
@@ -1074,43 +808,6 @@ entities model =
                             Nothing
                 )
                 inputs
-            ++ (case model.waterTexture of
-                    Loaded texture ->
-                        [ WebGL.entity
-                            waterVertexShader
-                            waterFragmentShader
-                            waterMesh
-                            { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.viewMatrix
-                            , texture = texture
-                            , time = Duration.from model.startTime time |> Duration.inSeconds
-                            }
-                        ]
-
-                    _ ->
-                        []
-               )
-            ++ (case model.cloudTexture of
-                    Loaded texture ->
-                        [ WebGL.entityWith
-                            [ premultipliedBlend
-                            , DepthTest.less { write = False, near = 0, far = 1 }
-                            ]
-                            cloudVertexShader
-                            cloudFragmentShader
-                            cloudMesh
-                            { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.viewMatrix
-                            , texture = texture
-                            }
-                        ]
-
-                    Loading ->
-                        []
-
-                    LoadError _ ->
-                        []
-               )
 
 
 blend : Setting
