@@ -10,6 +10,7 @@ import Effect.WebGL.Texture exposing (Texture)
 import Length exposing (Meters)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
+import Math.Vector4 exposing (Vec4)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Rate, Unitless)
@@ -29,7 +30,16 @@ type alias FrontendModel =
     , boundaryCenter : Point2d Meters World
     , fontTexture : LoadStatus Effect.WebGL.Texture.Error Texture
     , brickSize : Coord GridUnit
+    , bricks : List Brick
+    , brickMesh : Effect.WebGL.Mesh Vertex
+    , holdingLeftTrigger : Bool
+    , holdingRightTrigger : Bool
+    , lastUsedInput : Effect.WebGL.XrHandedness
     }
+
+
+type alias Brick =
+    { min : Coord GridUnit, max : Coord GridUnit, z : Int, color : Vec4 }
 
 
 type GridUnit
@@ -63,7 +73,7 @@ type LoadStatus e a
 
 type alias Vertex =
     { position : Vec3
-    , color : Vec3
+    , color : Vec4
     , normal : Vec3
     , shininess : Float
     }

@@ -5,24 +5,22 @@ import Array2D
 import BayerMatrix
 import Browser exposing (UrlRequest(..))
 import Bytes.Encode
-import Coord
+import Coord exposing (Coord)
 import Dict
 import Direction3d exposing (Direction3d)
 import Duration exposing (Duration, Seconds)
 import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.Http
 import Effect.Lamdera
 import Effect.Subscription as Subscription
 import Effect.Task as Task
 import Effect.Time as Time
-import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrRenderError(..))
+import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrInput, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
 import Effect.WebGL.Texture exposing (Texture)
 import Font
 import Frame3d exposing (Frame3d)
-import Geometry.Interop.LinearAlgebra.Frame3d as Frame3d
 import Geometry.Interop.LinearAlgebra.Point2d as Point2d
 import Geometry.Interop.LinearAlgebra.Point3d as Point3d
 import Geometry.Interop.LinearAlgebra.Vector3d as Vector3d
@@ -36,11 +34,10 @@ import List.Extra
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
-import Obj.Decode
+import Math.Vector4 as Vec4 exposing (Vec4)
 import Point2d
 import Point3d exposing (Point3d)
-import Quantity exposing (Product, Quantity, Rate)
-import Random
+import Quantity exposing (Product, Quantity(..), Rate)
 import TriangularMesh
 import Types exposing (..)
 import Unsafe
@@ -77,8 +74,8 @@ gridUnitSize =
     Vector3d.millimeters 16 16 20
 
 
-cube : Point3d u c -> Vector3d u c -> WebGL.Mesh Vertex
-cube position size =
+cube : Point3d u c -> Vector3d u c -> Vec4 -> List Vertex
+cube position size color =
     let
         p =
             Point3d.unwrap position
@@ -129,46 +126,45 @@ cube position size =
             Vec3.vec3 -1 0 0
     in
     [ -- down
-      { position = v000, color = red, normal = down, shininess = 1 }
-    , { position = v100, color = red, normal = down, shininess = 1 }
-    , { position = v110, color = red, normal = down, shininess = 1 }
-    , { position = v010, color = red, normal = down, shininess = 1 }
+      { position = v000, color = color, normal = down, shininess = 1 }
+    , { position = v100, color = color, normal = down, shininess = 1 }
+    , { position = v110, color = color, normal = down, shininess = 1 }
+    , { position = v010, color = color, normal = down, shininess = 1 }
 
     -- up
-    , { position = v001, color = red, normal = up, shininess = 1 }
-    , { position = v101, color = red, normal = up, shininess = 1 }
-    , { position = v111, color = red, normal = up, shininess = 1 }
-    , { position = v011, color = red, normal = up, shininess = 1 }
+    , { position = v001, color = color, normal = up, shininess = 1 }
+    , { position = v011, color = color, normal = up, shininess = 1 }
+    , { position = v111, color = color, normal = up, shininess = 1 }
+    , { position = v101, color = color, normal = up, shininess = 1 }
 
     -- left
-    , { position = v000, color = red, normal = left, shininess = 1 }
-    , { position = v010, color = red, normal = left, shininess = 1 }
-    , { position = v011, color = red, normal = left, shininess = 1 }
-    , { position = v001, color = red, normal = left, shininess = 1 }
+    , { position = v000, color = color, normal = left, shininess = 1 }
+    , { position = v010, color = color, normal = left, shininess = 1 }
+    , { position = v011, color = color, normal = left, shininess = 1 }
+    , { position = v001, color = color, normal = left, shininess = 1 }
 
     -- right
-    , { position = v100, color = red, normal = right, shininess = 1 }
-    , { position = v110, color = red, normal = right, shininess = 1 }
-    , { position = v111, color = red, normal = right, shininess = 1 }
-    , { position = v101, color = red, normal = right, shininess = 1 }
+    , { position = v100, color = color, normal = right, shininess = 1 }
+    , { position = v101, color = color, normal = right, shininess = 1 }
+    , { position = v111, color = color, normal = right, shininess = 1 }
+    , { position = v110, color = color, normal = right, shininess = 1 }
 
     -- front
-    , { position = v010, color = red, normal = front, shininess = 1 }
-    , { position = v110, color = red, normal = front, shininess = 1 }
-    , { position = v111, color = red, normal = front, shininess = 1 }
-    , { position = v011, color = red, normal = front, shininess = 1 }
+    , { position = v010, color = color, normal = front, shininess = 1 }
+    , { position = v110, color = color, normal = front, shininess = 1 }
+    , { position = v111, color = color, normal = front, shininess = 1 }
+    , { position = v011, color = color, normal = front, shininess = 1 }
 
     -- back
-    , { position = v000, color = red, normal = back, shininess = 1 }
-    , { position = v100, color = red, normal = back, shininess = 1 }
-    , { position = v101, color = red, normal = back, shininess = 1 }
-    , { position = v001, color = red, normal = back, shininess = 1 }
+    , { position = v000, color = color, normal = back, shininess = 1 }
+    , { position = v001, color = color, normal = back, shininess = 1 }
+    , { position = v101, color = color, normal = back, shininess = 1 }
+    , { position = v100, color = color, normal = back, shininess = 1 }
     ]
-        |> quadsToMesh
 
 
 red =
-    Vec3.vec3 0.8 0 0
+    Vec4.vec4 0.8 0 0 1
 
 
 init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -184,6 +180,11 @@ init url key =
       , lagWarning = Time.millisToPosix 0
       , fontTexture = Loading
       , brickSize = Coord.xy 2 4
+      , bricks = []
+      , holdingRightTrigger = False
+      , holdingLeftTrigger = False
+      , brickMesh = WebGL.indexedTriangles [] []
+      , lastUsedInput = WebGL.LeftHand
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -459,64 +460,193 @@ textMesh position text =
         |> quadsToMesh
 
 
+brickToMesh : Brick -> List Vertex
+brickToMesh brick =
+    let
+        ( Quantity minX, Quantity minY ) =
+            brick.min
+
+        ( Quantity maxX, Quantity maxY ) =
+            brick.max
+
+        s : { x : Float, y : Float, z : Float }
+        s =
+            Vector3d.toMeters gridUnitSize
+    in
+    cube
+        (Point3d.meters
+            (s.x * toFloat minX)
+            (s.y * toFloat minY)
+            (s.z * toFloat brick.z)
+        )
+        (Vector3d.meters
+            (s.x * toFloat (maxX - minX))
+            (s.y * toFloat (maxY - minY))
+            s.z
+        )
+        brick.color
+
+
+pointToBrick : Point3d Meters World -> Coord GridUnit -> Vec4 -> Brick
+pointToBrick point brickSize color =
+    let
+        point2 : { x : Float, y : Float, z : Float }
+        point2 =
+            Point3d.toMeters point
+
+        grid : { x : Float, y : Float, z : Float }
+        grid =
+            Vector3d.toMeters gridUnitSize
+
+        gridPos : Coord GridUnit
+        gridPos =
+            Coord.xy
+                (round (point2.x / grid.x))
+                (round (point2.y / grid.y))
+    in
+    { min = gridPos
+    , max = Coord.plus brickSize gridPos
+    , z = 0
+    , color = color
+    }
+
+
+leftAndRightInputs : List XrInput -> ( Maybe XrInput, Maybe XrInput )
+leftAndRightInputs inputs =
+    List.foldl
+        (\input ( left, right ) ->
+            case input.handedness of
+                WebGL.LeftHand ->
+                    ( Just input, right )
+
+                WebGL.RightHand ->
+                    ( left, Just input )
+
+                WebGL.Unknown ->
+                    ( left, right )
+        )
+        ( Nothing, Nothing )
+        inputs
+
+
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 vrUpdate pose model =
     let
-        grabbed : Maybe Int
-        grabbed =
-            List.Extra.findIndex
-                (\input ->
-                    case List.Extra.getAt 1 input.buttons of
+        ( maybeLeftInput, maybeRightInput ) =
+            leftAndRightInputs pose.inputs
+
+        holdingLeftTrigger : Bool
+        holdingLeftTrigger =
+            case maybeLeftInput of
+                Just leftInput ->
+                    case List.Extra.getAt 0 leftInput.buttons of
                         Just button ->
                             button.value > 0.5
 
                         Nothing ->
                             False
-                )
-                pose.inputs
 
-        --isShooting : Bool
-        --isShooting =
-        --    case maybeInput of
-        --        Just input ->
-        --            case List.Extra.getAt 0 input.buttons of
-        --                Just button ->
-        --                    if Duration.from model.lastShot pose.time |> Quantity.lessThan (Duration.milliseconds 100) then
-        --                        False
-        --
-        --                    else
-        --                        button.value > 0.5
-        --
-        --                Nothing ->
-        --                    False
-        --
-        --        Nothing ->
-        --            False
-        --
-        --newFrame : Frame3d Meters World { defines : PlaneLocal }
-        --newFrame =
-        --    case Maybe.andThen .matrix maybeInput of
-        --        Just matrix ->
-        --            mat4ToFrame3d matrix
-        --
-        --        Nothing ->
-        --            model.plane
+                Nothing ->
+                    False
+
+        holdingRightTrigger : Bool
+        holdingRightTrigger =
+            case maybeRightInput of
+                Just leftInput ->
+                    case List.Extra.getAt 0 leftInput.buttons of
+                        Just button ->
+                            button.value > 0.5
+
+                        Nothing ->
+                            False
+
+                Nothing ->
+                    False
+
         elapsedTime =
             Duration.from model.lastVrUpdate pose.time
 
         sameBoundary =
             model.previousBoundary == pose.boundary
+
+        ( brickMesh2, bricks2 ) =
+            case model.lastUsedInput of
+                WebGL.LeftHand ->
+                    if holdingLeftTrigger && not model.holdingLeftTrigger then
+                        case maybeLeftInput of
+                            Just leftInput ->
+                                case leftInput.matrix of
+                                    Just matrix ->
+                                        let
+                                            bricks3 : List Brick
+                                            bricks3 =
+                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red :: model.bricks
+                                        in
+                                        ( List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
+                                        , bricks3
+                                        )
+
+                                    Nothing ->
+                                        ( model.brickMesh, model.bricks )
+
+                            Nothing ->
+                                ( model.brickMesh, model.bricks )
+
+                    else
+                        ( model.brickMesh, model.bricks )
+
+                WebGL.RightHand ->
+                    if holdingRightTrigger && not model.holdingRightTrigger then
+                        case maybeRightInput of
+                            Just rightInput ->
+                                case rightInput.matrix of
+                                    Just matrix ->
+                                        let
+                                            bricks3 : List Brick
+                                            bricks3 =
+                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red :: model.bricks
+                                        in
+                                        ( List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
+                                        , bricks3
+                                        )
+
+                                    Nothing ->
+                                        ( model.brickMesh, model.bricks )
+
+                            Nothing ->
+                                ( model.brickMesh, model.bricks )
+
+                    else
+                        ( model.brickMesh, model.bricks )
+
+                WebGL.Unknown ->
+                    ( model.brickMesh, model.bricks )
     in
-    ( { model
-        | time = pose.time
-        , previousBoundary = pose.boundary
-        , boundaryMesh =
+    ( { key = model.key
+      , time = pose.time
+      , isInVr = model.isInVr
+      , fontTexture = model.fontTexture
+      , brickSize = model.brickSize
+      , bricks = bricks2
+      , brickMesh = brickMesh2
+      , startTime = model.startTime
+      , previousBoundary = pose.boundary
+      , lastUsedInput =
+            if holdingLeftTrigger && model.holdingLeftTrigger then
+                WebGL.LeftHand
+
+            else if holdingRightTrigger && model.holdingRightTrigger then
+                WebGL.RightHand
+
+            else
+                model.lastUsedInput
+      , boundaryMesh =
             if sameBoundary then
                 model.boundaryMesh
 
             else
                 getBoundaryMesh pose.boundary
-        , boundaryCenter =
+      , boundaryCenter =
             if sameBoundary then
                 model.boundaryCenter
 
@@ -527,13 +657,15 @@ vrUpdate pose model =
 
                     _ ->
                         model.boundaryCenter
-        , lastVrUpdate = pose.time
-        , lagWarning =
+      , lastVrUpdate = pose.time
+      , lagWarning =
             if elapsedTime |> Quantity.greaterThan (Duration.milliseconds 30) then
                 pose.time
 
             else
                 model.lagWarning
+      , holdingLeftTrigger = holdingLeftTrigger
+      , holdingRightTrigger = holdingRightTrigger
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model)
@@ -627,22 +759,22 @@ getBoundaryMesh maybeBoundary =
                     , first = v
                     , quads =
                         { position = Vec3.vec3 x2 y2 0
-                        , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                        , color = Vec4.vec4 t (1 - t) (0.5 + t / 2) 1
                         , normal = Vec3.vec3 0 1 0
                         , shininess = 20
                         }
                             :: { position = Vec3.vec3 x1 y1 0
-                               , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                               , color = Vec4.vec4 t (1 - t) (0.5 + t / 2) 1
                                , normal = Vec3.vec3 0 1 0
                                , shininess = 20
                                }
                             :: { position = Vec3.vec3 x1 y1 heightOffset
-                               , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                               , color = Vec4.vec4 t (1 - t) (0.5 + t / 2) 1
                                , normal = Vec3.vec3 0 1 0
                                , shininess = 20
                                }
                             :: { position = Vec3.vec3 x2 y2 heightOffset
-                               , color = Vec3.vec3 t (1 - t) (0.5 + t / 2)
+                               , color = Vec4.vec4 t (1 - t) (0.5 + t / 2) 1
                                , normal = Vec3.vec3 0 1 0
                                , shininess = 20
                                }
@@ -710,14 +842,11 @@ view model =
     }
 
 
-worldScale =
-    0.01
-
-
 zNormal =
     Vec3.vec3 0 0 1
 
 
+clearScreen : Entity
 clearScreen =
     WebGL.entityWith
         [ DepthTest.always { write = True, near = 0, far = 1 } ]
@@ -737,6 +866,7 @@ entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs :
 entities model =
     \{ time, xrView, inputs } ->
         let
+            viewPosition : Vec3
             viewPosition =
                 mat4ToPoint3d xrView.viewMatrix |> Point3d.toVec3
         in
@@ -754,16 +884,7 @@ entities model =
                           --    , viewMatrix = Mat4.identity --xrView.viewMatrix
                           --    , fontTexture = fontTexture
                           --    }
-                          WebGL.entity
-                            vertexShader
-                            fragmentShader
-                            cube1
-                            { perspective = xrView.projectionMatrix
-                            , viewMatrix = xrView.viewMatrix
-                            , cameraPosition = viewPosition
-                            , modelTransform = Mat4.identity
-                            }
-                        , WebGL.entityWith
+                          WebGL.entityWith
                             [ premultipliedBlend
                             ]
                             labelVertexShader
@@ -791,7 +912,39 @@ entities model =
                             , modelTransform = Mat4.identity
                             , cameraPosition = viewPosition
                             }
+                        , WebGL.entityWith
+                            [ DepthTest.default
+                            , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
+                            ]
+                            vertexShader
+                            fragmentShader
+                            model.brickMesh
+                            { perspective = xrView.projectionMatrix
+                            , viewMatrix = xrView.viewMatrix
+                            , modelTransform = Mat4.identity
+                            , cameraPosition = viewPosition
+                            }
                         ]
+                            ++ (case ( leftAndRightInputs inputs, model.lastUsedInput ) of
+                                    ( ( Just left, _ ), WebGL.LeftHand ) ->
+                                        case left.matrix of
+                                            Just matrix ->
+                                                [ drawPreviewBrick viewPosition xrView matrix model ]
+
+                                            Nothing ->
+                                                []
+
+                                    ( ( _, Just right ), WebGL.RightHand ) ->
+                                        case right.matrix of
+                                            Just matrix ->
+                                                [ drawPreviewBrick viewPosition xrView matrix model ]
+
+                                            Nothing ->
+                                                []
+
+                                    _ ->
+                                        []
+                               )
 
                     _ ->
                         []
@@ -833,6 +986,25 @@ entities model =
                 inputs
 
 
+drawPreviewBrick : Vec3 -> WebGL.XrView -> Mat4 -> { b | brickSize : Coord GridUnit } -> Entity
+drawPreviewBrick viewPosition xrView matrix model =
+    WebGL.entityWith
+        [ DepthTest.default
+        , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
+        ]
+        vertexShader
+        fragmentShader
+        (pointToBrick (mat4ToPoint3d matrix) model.brickSize (Vec4.vec4 0.2 0.2 1 0.3)
+            |> brickToMesh
+            |> quadsToMesh
+        )
+        { perspective = xrView.projectionMatrix
+        , viewMatrix = xrView.viewMatrix
+        , modelTransform = Mat4.identity
+        , cameraPosition = viewPosition
+        }
+
+
 blend : Setting
 blend =
     Blend.add Blend.srcAlpha Blend.oneMinusSrcAlpha
@@ -867,136 +1039,34 @@ floorAxes =
             0.3
     in
     [ -- X axis
-      { position = Vec3.vec3 length -thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 length thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 0 thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 0 -thickness 0, color = Vec3.vec3 1 0 0, normal = zNormal, shininess = 20 }
+      { position = Vec3.vec3 length -thickness 0, color = Vec4.vec4 1 0 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 length thickness 0, color = Vec4.vec4 1 0 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 0 thickness 0, color = Vec4.vec4 1 0 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 0 -thickness 0, color = Vec4.vec4 1 0 0 1, normal = zNormal, shininess = 20 }
     , -- Y axis
-      { position = Vec3.vec3 -thickness length 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 thickness length 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 1 0, normal = zNormal, shininess = 20 }
+      { position = Vec3.vec3 -thickness length 0, color = Vec4.vec4 0 1 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness length 0, color = Vec4.vec4 0 1 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness 0 0, color = Vec4.vec4 0 1 0 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 -thickness 0 0, color = Vec4.vec4 0 1 0 1, normal = zNormal, shininess = 20 }
     , -- Z axis
-      { position = Vec3.vec3 -thickness 0 length, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 thickness 0 length, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 thickness 0 0, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
-    , { position = Vec3.vec3 -thickness 0 0, color = Vec3.vec3 0 0 1, normal = zNormal, shininess = 20 }
+      { position = Vec3.vec3 -thickness 0 length, color = Vec4.vec4 0 0 1 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness 0 length, color = Vec4.vec4 0 0 1 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 thickness 0 0, color = Vec4.vec4 0 0 1 1, normal = zNormal, shininess = 20 }
+    , { position = Vec3.vec3 -thickness 0 0, color = Vec4.vec4 0 0 1 1, normal = zNormal, shininess = 20 }
     ]
         |> quadsToMesh
 
 
-cube1 =
-    cube Point3d.origin (Vector3d.meters 0.5 0.2 0.1)
-
-
 sphere1 : Mesh Vertex
 sphere1 =
-    sphere 0 (Vec3.vec3 1 0 0) (Point3d.meters 0 0 -1.2) 8
+    sphere 0 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 8
 
 
 splashSphere =
-    sphere 0 (Vec3.vec3 0.7 0.8 1) Point3d.origin 4
+    sphere 0 (Vec4.vec4 0.7 0.8 1 1) Point3d.origin 4
 
 
-splashAnimFrameCount =
-    60
-
-
-splashAnimDuration =
-    Duration.milliseconds 600
-
-
-splashFrames : Array (Mesh Vertex)
-splashFrames =
-    List.range 0 (splashAnimFrameCount - 1)
-        |> List.map (\i -> getSplashFrame (toFloat i / splashAnimFrameCount))
-        |> Array.fromList
-
-
-getSplashFrame : Float -> Mesh Vertex
-getSplashFrame t =
-    let
-        dir =
-            Direction3d.z
-
-        position =
-            Point3d.origin
-
-        t2 =
-            if t < 0.1 then
-                t * 10
-
-            else
-                1 - (((t - 0.1) / 0.9) ^ 2)
-
-        vDir : Vector3d Meters World
-        vDir =
-            Vector3d.meters 0 0 (worldScale * 5 * t2)
-
-        ( d1, d2 ) =
-            Direction3d.perpendicularBasis dir
-
-        radius =
-            worldScale * (0.3 + t * t * 1)
-
-        v1 =
-            Direction3d.toVector d1 |> Vector3d.scaleBy radius |> Vector3d.unwrap |> Vector3d.unsafe
-
-        v2 =
-            Direction3d.toVector d2 |> Vector3d.scaleBy radius |> Vector3d.unwrap |> Vector3d.unsafe
-
-        p1 =
-            Point3d.translateBy v1 position
-
-        p2 =
-            Point3d.translateBy v2 position
-
-        p3 =
-            Point3d.translateBy (Vector3d.reverse v1) position
-
-        p4 =
-            Point3d.translateBy (Vector3d.reverse v2) position
-
-        splashColor =
-            Vec3.vec3 0.7 0.8 1
-
-        i =
-            0
-    in
-    WebGL.indexedTriangles
-        [ -- Bullet trail tail
-          { position = Point3d.toVec3 p1, color = splashColor, normal = zNormal, shininess = 20 }
-        , { position = Point3d.toVec3 p2, color = splashColor, normal = zNormal, shininess = 20 }
-        , { position = Point3d.toVec3 p3, color = splashColor, normal = zNormal, shininess = 20 }
-        , { position = Point3d.toVec3 p4, color = splashColor, normal = zNormal, shininess = 20 }
-        , -- Bullet trail head
-          { position = Point3d.translateBy vDir p1 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
-        , { position = Point3d.translateBy vDir p2 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
-        , { position = Point3d.translateBy vDir p3 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
-        , { position = Point3d.translateBy vDir p4 |> Point3d.toVec3, color = splashColor, normal = zNormal, shininess = 20 }
-        ]
-        [ --tail quad
-          ( i, i + 1, i + 2 )
-        , ( i + 2, i + 3, i )
-        , -- head quad
-          ( i + 4, i + 5, i + 6 )
-        , ( i + 6, i + 7, i + 4 )
-        , -- side 1
-          ( i, i + 4, i + 1 )
-        , ( i + 1, i + 5, i + 4 )
-        , -- side 2
-          ( i + 1, i + 5, i + 6 )
-        , ( i + 1, i + 6, i + 2 )
-        , -- side 3
-          ( i + 2, i + 6, i + 3 )
-        , ( i + 6, i + 7, i + 3 )
-        , -- side 4
-          ( i + 7, i + 3, i + 4 )
-        , ( i + 4, i, i + 3 )
-        ]
-
-
-sphere : Float -> Vec3 -> Point3d u c -> Int -> Mesh Vertex
+sphere : Float -> Vec4 -> Point3d u c -> Int -> Mesh Vertex
 sphere shininess color position detail =
     let
         radius =
@@ -1051,14 +1121,14 @@ type alias CloudUniforms =
 
 
 type alias Varying =
-    { vColor : Vec3, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3, vShininess : Float }
+    { vColor : Vec4, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3, vShininess : Float }
 
 
 vertexShader : Shader Vertex Uniforms Varying
 vertexShader =
     [glsl|
 attribute vec3 position;
-attribute vec3 color;
+attribute vec4 color;
 attribute vec3 normal;
 attribute float shininess;
 
@@ -1067,7 +1137,7 @@ uniform mat4 viewMatrix;
 uniform mat4 perspective;
 uniform vec3 cameraPosition;
 
-varying vec3 vColor;
+varying vec4 vColor;
 varying vec3 vNormal;
 varying vec3 vPosition;
 varying vec3 vCameraPosition;
@@ -1088,7 +1158,7 @@ fragmentShader : Shader {} a Varying
 fragmentShader =
     [glsl|
 precision mediump float;
-varying vec3 vColor;
+varying vec4 vColor;
 varying vec3 vNormal;
 varying vec3 vPosition;
 varying vec3 vCameraPosition;
@@ -1130,7 +1200,7 @@ vec3 ApplyLight(
 void main () {
     vec3 color2 =
         ApplyLight(
-            vec3(0.0, 0.0, 1.0),
+            vec3(0.3, 0.5, 1.0),
             vec3(0.5, 0.5, 0.5),
             0.5,
             vColor.rgb,
@@ -1141,7 +1211,7 @@ void main () {
 
     float gamma = 2.2;
 
-    gl_FragColor = vec4(pow(color2, vec3(1.0/gamma)), 1.0);
+    gl_FragColor = vec4(pow(color2, vec3(1.0/gamma)), vColor.a);
 }
     |]
 
