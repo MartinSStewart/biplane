@@ -71,7 +71,7 @@ app =
 
 gridUnitSize : Vector3d Meters World
 gridUnitSize =
-    Vector3d.millimeters 16 16 20
+    Vector3d.millimeters 32 32 20
 
 
 cube : Point3d u c -> Vector3d u c -> Vec4 -> List Vertex
@@ -179,7 +179,7 @@ init url key =
       , previousBoundary = Nothing
       , lagWarning = Time.millisToPosix 0
       , fontTexture = Loading
-      , brickSize = Coord.xy 2 4
+      , brickSize = Coord.xy 1 2
       , bricks = []
       , holdingRightTrigger = False
       , holdingLeftTrigger = False
@@ -487,8 +487,8 @@ brickToMesh brick =
         brick.color
 
 
-pointToBrick : Point3d Meters World -> Coord GridUnit -> Vec4 -> Brick
-pointToBrick point brickSize color =
+pointToBrick : Point3d Meters World -> Coord GridUnit -> Vec4 -> List Brick -> Brick
+pointToBrick point brickSize color existingBricks =
     let
         point2 : { x : Float, y : Float, z : Float }
         point2 =
@@ -503,12 +503,47 @@ pointToBrick point brickSize color =
             Coord.xy
                 (round (point2.x / grid.x))
                 (round (point2.y / grid.y))
+
+        a =
+            { min = gridPos, max = Coord.plus brickSize gridPos }
     in
     { min = gridPos
     , max = Coord.plus brickSize gridPos
-    , z = 0
+    , z =
+        List.foldl
+            (\brick z ->
+                if brickOverlap a brick then
+                    max z (brick.z + 1)
+
+                else
+                    z
+            )
+            0
+            existingBricks
     , color = color
     }
+
+
+brickOverlap :
+    { a | min : Coord GridUnit, max : Coord GridUnit }
+    -> { b | min : Coord GridUnit, max : Coord GridUnit }
+    -> Bool
+brickOverlap a b =
+    let
+        ( Quantity ax0, Quantity ay0 ) =
+            a.min
+
+        ( Quantity ax1, Quantity ay1 ) =
+            a.max
+
+        ( Quantity bx0, Quantity by0 ) =
+            b.min
+
+        ( Quantity bx1, Quantity by1 ) =
+            b.max
+    in
+    ((bx0 - ax0 <= 0 && ax0 - bx1 < 0) || (bx0 - ax1 < 0 && ax1 - bx1 <= 0))
+        && ((by0 - ay0 <= 0 && ay0 - by1 < 0) || (by0 - ay1 < 0 && ay1 - by1 <= 0))
 
 
 leftAndRightInputs : List XrInput -> ( Maybe XrInput, Maybe XrInput )
@@ -580,7 +615,8 @@ vrUpdate pose model =
                                         let
                                             bricks3 : List Brick
                                             bricks3 =
-                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red :: model.bricks
+                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                                                    :: model.bricks
                                         in
                                         ( List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
                                         , bricks3
@@ -604,7 +640,8 @@ vrUpdate pose model =
                                         let
                                             bricks3 : List Brick
                                             bricks3 =
-                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red :: model.bricks
+                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                                                    :: model.bricks
                                         in
                                         ( List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
                                         , bricks3
@@ -986,15 +1023,16 @@ entities model =
                 inputs
 
 
-drawPreviewBrick : Vec3 -> WebGL.XrView -> Mat4 -> { b | brickSize : Coord GridUnit } -> Entity
+drawPreviewBrick : Vec3 -> WebGL.XrView -> Mat4 -> FrontendModel -> Entity
 drawPreviewBrick viewPosition xrView matrix model =
     WebGL.entityWith
         [ DepthTest.default
         , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
+        , blend
         ]
         vertexShader
         fragmentShader
-        (pointToBrick (mat4ToPoint3d matrix) model.brickSize (Vec4.vec4 0.2 0.2 1 0.3)
+        (pointToBrick (mat4ToPoint3d matrix) model.brickSize (Vec4.vec4 0.2 0.2 1 0.3) model.bricks
             |> brickToMesh
             |> quadsToMesh
         )
