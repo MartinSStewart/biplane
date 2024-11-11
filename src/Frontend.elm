@@ -182,10 +182,10 @@ init url key =
       , fontTexture = Loading
       , brickSize = Coord.xy 1 2
       , bricks = []
-      , holdingRightTrigger = False
-      , holdingLeftTrigger = False
       , brickMesh = WebGL.indexedTriangles [] []
       , lastUsedInput = WebGL.LeftHand
+      , previousLeftInput = noInput
+      , previousRightInput = noInput
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -562,38 +562,41 @@ brickOverlap a b =
         && ((by0 - ay0 <= 0 && ay0 - by1 < 0) || (by0 - ay1 < 0 && ay1 - by1 <= 0))
 
 
-leftAndRightInputs : List XrInput -> ( Maybe Input2, Maybe Input2 )
+leftAndRightInputs : List XrInput -> ( Input2, Input2 )
 leftAndRightInputs inputs =
     List.foldl
         (\input ( left, right ) ->
             case input.handedness of
                 WebGL.LeftHand ->
-                    ( Just (inputToButtons input), right )
+                    ( inputToButtons input, right )
 
                 WebGL.RightHand ->
-                    ( left, Just (inputToButtons input) )
+                    ( left, inputToButtons input )
 
                 WebGL.Unknown ->
                     ( left, right )
         )
-        ( Nothing, Nothing )
+        ( noInput, noInput )
         inputs
 
 
-type alias Input2 =
-    { trigger : Float
-    , sideTrigger : Float
-    , aButton : Bool
-    , bButton : Bool
-    , matrix : Maybe Mat4
+noInput : Input2
+noInput =
+    { trigger = 0
+    , joystickButton = False
+    , sideTrigger = 0
+    , aButton = False
+    , bButton = False
+    , matrix = Nothing
     }
 
 
 inputToButtons : WebGL.XrInput -> Input2
 inputToButtons input =
     case input.buttons of
-        trigger :: sideTrigger :: aButton :: bButton :: _ ->
+        trigger :: sideTrigger :: _ :: joystickButton :: aButton :: bButton :: _ ->
             { trigger = trigger.value
+            , joystickButton = joystickButton.isPressed
             , sideTrigger = sideTrigger.value
             , aButton = aButton.isPressed
             , bButton = bButton.isPressed
@@ -601,18 +604,13 @@ inputToButtons input =
             }
 
         _ ->
-            { trigger = 0
-            , sideTrigger = 0
-            , aButton = False
-            , bButton = False
-            , matrix = input.matrix
-            }
+            noInput
 
 
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 vrUpdate pose model =
     let
-        ( maybeLeftInput, maybeRightInput ) =
+        ( leftInput, rightInput ) =
             leftAndRightInputs pose.inputs
 
         elapsedTime =
@@ -621,93 +619,73 @@ vrUpdate pose model =
         sameBoundary =
             model.previousBoundary == pose.boundary
 
-        holdingLeftTrigger : Bool
-        holdingLeftTrigger =
-            case maybeLeftInput of
-                Just input ->
-                    input.trigger > 0.5
+        pressedLeftTrigger =
+            leftInput.trigger > 0.5 && model.previousLeftInput.trigger <= 0.5
 
-                Nothing ->
-                    False
+        pressedRightTrigger =
+            rightInput.trigger > 0.5 && model.previousRightInput.trigger <= 0.5
 
-        holdingRightTrigger : Bool
-        holdingRightTrigger =
-            case maybeRightInput of
-                Just input ->
-                    input.trigger > 0.5
-
-                Nothing ->
-                    False
-
-        ( brickMesh2, bricks2 ) =
+        ( meshChanged, bricks2 ) =
             case model.lastUsedInput of
                 WebGL.LeftHand ->
-                    if holdingLeftTrigger && not model.holdingLeftTrigger then
-                        case maybeLeftInput of
-                            Just leftInput ->
-                                case leftInput.matrix of
-                                    Just matrix ->
-                                        let
-                                            bricks3 : List Brick
-                                            bricks3 =
-                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
-                                                    :: model.bricks
-                                        in
-                                        ( List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
-                                        , bricks3
-                                        )
-
-                                    Nothing ->
-                                        ( model.brickMesh, model.bricks )
+                    if pressedLeftTrigger then
+                        case leftInput.matrix of
+                            Just matrix ->
+                                ( True
+                                , pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                                    :: model.bricks
+                                )
 
                             Nothing ->
-                                ( model.brickMesh, model.bricks )
+                                ( False, model.bricks )
 
                     else
-                        ( model.brickMesh, model.bricks )
+                        ( False, model.bricks )
 
                 WebGL.RightHand ->
-                    if holdingRightTrigger && not model.holdingRightTrigger then
-                        case maybeRightInput of
-                            Just rightInput ->
-                                case rightInput.matrix of
-                                    Just matrix ->
-                                        let
-                                            bricks3 : List Brick
-                                            bricks3 =
-                                                pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
-                                                    :: model.bricks
-                                        in
-                                        ( List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
-                                        , bricks3
-                                        )
-
-                                    Nothing ->
-                                        ( model.brickMesh, model.bricks )
+                    if pressedRightTrigger then
+                        case rightInput.matrix of
+                            Just matrix ->
+                                ( True
+                                , pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                                    :: model.bricks
+                                )
 
                             Nothing ->
-                                ( model.brickMesh, model.bricks )
+                                ( False, model.bricks )
 
                     else
-                        ( model.brickMesh, model.bricks )
+                        ( False, model.bricks )
 
                 WebGL.Unknown ->
-                    ( model.brickMesh, model.bricks )
+                    ( False, model.bricks )
+
+        ( meshChanged2, bricks3 ) =
+            if leftInput.bButton then
+                ( True, List.drop 1 bricks2 )
+
+            else
+                ( False, bricks2 )
     in
     ( { key = model.key
       , time = pose.time
       , isInVr = model.isInVr
       , fontTexture = model.fontTexture
       , brickSize = model.brickSize
-      , bricks = bricks2
-      , brickMesh = brickMesh2
+      , bricks = bricks3
+      , brickMesh =
+            if meshChanged || meshChanged2 then
+                List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
+
+            else
+                model.brickMesh
       , startTime = model.startTime
       , previousBoundary = pose.boundary
       , lastUsedInput =
-            if holdingLeftTrigger && not model.holdingLeftTrigger then
+            if pressedLeftTrigger then
                 WebGL.LeftHand
 
-            else if holdingRightTrigger && not model.holdingRightTrigger then
+            else if pressedRightTrigger then
                 WebGL.RightHand
 
             else
@@ -736,8 +714,8 @@ vrUpdate pose model =
 
             else
                 model.lagWarning
-      , holdingLeftTrigger = holdingLeftTrigger
-      , holdingRightTrigger = holdingRightTrigger
+      , previousLeftInput = leftInput
+      , previousRightInput = rightInput
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model)
@@ -941,6 +919,9 @@ entities model =
             viewPosition : Vec3
             viewPosition =
                 mat4ToPoint3d xrView.viewMatrix |> Point3d.toVec3
+
+            ( leftInput, rightInput ) =
+                leftAndRightInputs inputs
         in
         [ clearScreen
         ]
@@ -997,24 +978,24 @@ entities model =
                             , cameraPosition = viewPosition
                             }
                         ]
-                            ++ (case ( leftAndRightInputs inputs, model.lastUsedInput ) of
-                                    ( ( Just left, _ ), WebGL.LeftHand ) ->
-                                        case left.matrix of
+                            ++ (case model.lastUsedInput of
+                                    WebGL.LeftHand ->
+                                        case leftInput.matrix of
                                             Just matrix ->
                                                 [ drawPreviewBrick viewPosition xrView matrix model ]
 
                                             Nothing ->
                                                 []
 
-                                    ( ( _, Just right ), WebGL.RightHand ) ->
-                                        case right.matrix of
+                                    WebGL.RightHand ->
+                                        case rightInput.matrix of
                                             Just matrix ->
                                                 [ drawPreviewBrick viewPosition xrView matrix model ]
 
                                             Nothing ->
                                                 []
 
-                                    _ ->
+                                    WebGL.Unknown ->
                                         []
                                )
 

@@ -8,6 +8,7 @@ import Effect.Time as Time
 import Effect.WebGL
 import Effect.WebGL.Texture exposing (Texture)
 import Length exposing (Meters)
+import Math.Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
 import Math.Vector4 exposing (Vec4)
@@ -32,9 +33,19 @@ type alias FrontendModel =
     , brickSize : Coord GridUnit
     , bricks : List Brick
     , brickMesh : Effect.WebGL.Mesh Vertex
-    , holdingLeftTrigger : Bool
-    , holdingRightTrigger : Bool
     , lastUsedInput : Effect.WebGL.XrHandedness
+    , previousLeftInput : Input2
+    , previousRightInput : Input2
+    }
+
+
+type alias Input2 =
+    { trigger : Float
+    , joystickButton : Bool
+    , sideTrigger : Float
+    , aButton : Bool
+    , bButton : Bool
+    , matrix : Maybe Mat4
     }
 
 
