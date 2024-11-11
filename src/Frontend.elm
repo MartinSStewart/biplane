@@ -661,7 +661,7 @@ vrUpdate pose model =
                     ( False, model.bricks )
 
         ( meshChanged2, bricks3 ) =
-            if leftInput.bButton then
+            if leftInput.aButton && not model.previousLeftInput.aButton then
                 ( True, List.drop 1 bricks2 )
 
             else
