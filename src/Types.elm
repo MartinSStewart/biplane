@@ -1,21 +1,18 @@
 module Types exposing (..)
 
 import Browser exposing (UrlRequest)
+import Coord exposing (Coord)
 import Duration exposing (Seconds)
 import Effect.Browser.Navigation
-import Effect.Http
 import Effect.Time as Time
 import Effect.WebGL
 import Effect.WebGL.Texture exposing (Texture)
-import Frame3d exposing (Frame3d)
 import Length exposing (Meters)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
-import Obj.Decode exposing (ObjCoordinates)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Rate, Unitless)
-import TriangularMesh exposing (TriangularMesh)
 import Url exposing (Url)
 import Vector3d exposing (Vector3d)
 
@@ -31,7 +28,12 @@ type alias FrontendModel =
     , lagWarning : Time.Posix
     , boundaryCenter : Point2d Meters World
     , fontTexture : LoadStatus Effect.WebGL.Texture.Error Texture
+    , brickSize : Coord GridUnit
     }
+
+
+type GridUnit
+    = GridUnit Never
 
 
 type alias Splash =
@@ -64,17 +66,6 @@ type alias Vertex =
     , color : Vec3
     , normal : Vec3
     , shininess : Float
-    }
-
-
-type alias WaterVertex =
-    { position : Vec3
-    }
-
-
-type alias CloudVertex =
-    { position : Vec3
-    , layer : Vec3
     }
 
 

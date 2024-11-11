@@ -5,6 +5,7 @@ import Array2D
 import BayerMatrix
 import Browser exposing (UrlRequest(..))
 import Bytes.Encode
+import Coord
 import Dict
 import Direction3d exposing (Direction3d)
 import Duration exposing (Duration, Seconds)
@@ -71,6 +72,105 @@ app =
         }
 
 
+gridUnitSize : Vector3d Meters World
+gridUnitSize =
+    Vector3d.millimeters 16 16 20
+
+
+cube : Point3d u c -> Vector3d u c -> WebGL.Mesh Vertex
+cube position size =
+    let
+        p =
+            Point3d.unwrap position
+
+        s =
+            Vector3d.unwrap size
+
+        v000 =
+            Vec3.vec3 p.x p.y p.z
+
+        v100 =
+            Vec3.vec3 (p.x + s.x) p.y p.z
+
+        v010 =
+            Vec3.vec3 p.x (p.y + s.y) p.z
+
+        v110 =
+            Vec3.vec3 (p.x + s.x) (p.y + s.y) p.z
+
+        v001 =
+            Vec3.vec3 p.x p.y (p.z + s.z)
+
+        v101 =
+            Vec3.vec3 (p.x + s.x) p.y (p.z + s.z)
+
+        v011 =
+            Vec3.vec3 p.x (p.y + s.y) (p.z + s.z)
+
+        v111 =
+            Vec3.vec3 (p.x + s.x) (p.y + s.y) (p.z + s.z)
+
+        up =
+            Vec3.vec3 0 0 1
+
+        down =
+            Vec3.vec3 0 0 -1
+
+        front =
+            Vec3.vec3 0 1 0
+
+        back =
+            Vec3.vec3 0 -1 0
+
+        right =
+            Vec3.vec3 1 0 0
+
+        left =
+            Vec3.vec3 -1 0 0
+    in
+    [ -- down
+      { position = v000, color = red, normal = down, shininess = 1 }
+    , { position = v100, color = red, normal = down, shininess = 1 }
+    , { position = v110, color = red, normal = down, shininess = 1 }
+    , { position = v010, color = red, normal = down, shininess = 1 }
+
+    -- up
+    , { position = v001, color = red, normal = up, shininess = 1 }
+    , { position = v101, color = red, normal = up, shininess = 1 }
+    , { position = v111, color = red, normal = up, shininess = 1 }
+    , { position = v011, color = red, normal = up, shininess = 1 }
+
+    -- left
+    , { position = v000, color = red, normal = left, shininess = 1 }
+    , { position = v010, color = red, normal = left, shininess = 1 }
+    , { position = v011, color = red, normal = left, shininess = 1 }
+    , { position = v001, color = red, normal = left, shininess = 1 }
+
+    -- right
+    , { position = v100, color = red, normal = right, shininess = 1 }
+    , { position = v110, color = red, normal = right, shininess = 1 }
+    , { position = v111, color = red, normal = right, shininess = 1 }
+    , { position = v101, color = red, normal = right, shininess = 1 }
+
+    -- front
+    , { position = v010, color = red, normal = front, shininess = 1 }
+    , { position = v110, color = red, normal = front, shininess = 1 }
+    , { position = v111, color = red, normal = front, shininess = 1 }
+    , { position = v011, color = red, normal = front, shininess = 1 }
+
+    -- back
+    , { position = v000, color = red, normal = back, shininess = 1 }
+    , { position = v100, color = red, normal = back, shininess = 1 }
+    , { position = v101, color = red, normal = back, shininess = 1 }
+    , { position = v001, color = red, normal = back, shininess = 1 }
+    ]
+        |> quadsToMesh
+
+
+red =
+    Vec3.vec3 0.8 0 0
+
+
 init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 init url key =
     ( { key = key
@@ -83,6 +183,7 @@ init url key =
       , previousBoundary = Nothing
       , lagWarning = Time.millisToPosix 0
       , fontTexture = Loading
+      , brickSize = Coord.xy 2 4
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -580,10 +681,6 @@ getQuadIndicesHelper list indexOffset newList =
             newList
 
 
-waterZ =
-    Length.meters 0.5
-
-
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 updateFromBackend msg model =
     case msg of
@@ -597,7 +694,7 @@ view model =
         elapsed =
             Duration.from model.startTime model.time
     in
-    { title = "Biplane!"
+    { title = "Brick collab"
     , body =
         [ if model.isInVr then
             Html.text "Currently in VR "
@@ -647,15 +744,24 @@ entities model =
         ]
             ++ (case model.fontTexture of
                     Loaded fontTexture ->
-                        [ WebGL.entityWith
-                            [ premultipliedBlend
-                            ]
-                            labelVertexShader
-                            labelFragmentShader
-                            helloWorld
+                        [ --WebGL.entityWith
+                          --    [ premultipliedBlend
+                          --    ]
+                          --    labelVertexShader
+                          --    labelFragmentShader
+                          --    helloWorld
+                          --    { perspective = xrView.projectionMatrix
+                          --    , viewMatrix = Mat4.identity --xrView.viewMatrix
+                          --    , fontTexture = fontTexture
+                          --    }
+                          WebGL.entity
+                            vertexShader
+                            fragmentShader
+                            cube1
                             { perspective = xrView.projectionMatrix
-                            , viewMatrix = Mat4.identity --xrView.viewMatrix
-                            , fontTexture = fontTexture
+                            , viewMatrix = xrView.viewMatrix
+                            , cameraPosition = viewPosition
+                            , modelTransform = Mat4.identity
                             }
                         , WebGL.entityWith
                             [ premultipliedBlend
@@ -751,10 +857,6 @@ square =
         |> quadsToMesh
 
 
-sunPosition =
-    Vec3.vec3 0 0 500
-
-
 floorAxes : Mesh Vertex
 floorAxes =
     let
@@ -783,18 +885,8 @@ floorAxes =
         |> quadsToMesh
 
 
-waterMesh : Mesh WaterVertex
-waterMesh =
-    let
-        size =
-            200
-    in
-    [ { position = Vec3.vec3 size -size (Length.inMeters waterZ) }
-    , { position = Vec3.vec3 size size (Length.inMeters waterZ) }
-    , { position = Vec3.vec3 -size size (Length.inMeters waterZ) }
-    , { position = Vec3.vec3 -size -size (Length.inMeters waterZ) }
-    ]
-        |> quadsToMesh
+cube1 =
+    cube Point3d.origin (Vector3d.meters 0.5 0.2 0.1)
 
 
 sphere1 : Mesh Vertex
@@ -962,42 +1054,6 @@ type alias Varying =
     { vColor : Vec3, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3, vShininess : Float }
 
 
-waterVertexShader : Shader WaterVertex { u | perspective : Mat4, viewMatrix : Mat4 } { vPosition : Vec2 }
-waterVertexShader =
-    [glsl|
-attribute vec3 position;
-
-uniform mat4 viewMatrix;
-uniform mat4 perspective;
-
-varying vec2 vPosition;
-
-void main(void) {
-    gl_Position = perspective * viewMatrix * vec4(position, 1.0);
-    vPosition = position.xy;
-}
-    |]
-
-
-waterFragmentShader : Shader {} { u | texture : Texture, time : Float } { vPosition : Vec2 }
-waterFragmentShader =
-    [glsl|
-precision mediump float;
-varying vec2 vPosition;
-
-uniform sampler2D texture;
-uniform float time;
-
-void main(void) {
-    gl_FragColor =
-        ( texture2D(texture, vec2(0.0123, -0.03451) * time + vPosition * 8.65621) * ((sin(time) + 2.0) / 4.0)
-        + texture2D(texture, vec2(-0.023169, 0.01451) * time + vPosition * 10.0) * ((sin(time+3.1415) + 2.0) / 4.0)
-        + texture2D(texture, vPosition * 3.0) / 2.0
-        );
-}
-    |]
-
-
 vertexShader : Shader Vertex Uniforms Varying
 vertexShader =
     [glsl|
@@ -1086,40 +1142,6 @@ void main () {
     float gamma = 2.2;
 
     gl_FragColor = vec4(pow(color2, vec3(1.0/gamma)), 1.0);
-}
-    |]
-
-
-cloudVertexShader : Shader CloudVertex CloudUniforms { vLayer : Vec3 }
-cloudVertexShader =
-    [glsl|
-attribute vec3 position;
-attribute vec3 layer;
-
-uniform mat4 viewMatrix;
-uniform mat4 perspective;
-
-varying vec3 vLayer;
-
-void main(void) {
-    gl_Position = perspective * viewMatrix * vec4(position, 1.0);
-    vLayer = layer;
-}
-    |]
-
-
-cloudFragmentShader : Shader {} { u | texture : Texture } { vLayer : Vec3 }
-cloudFragmentShader =
-    [glsl|
-precision mediump float;
-varying vec3 vLayer;
-
-uniform sampler2D texture;
-
-void main(void) {
-    float a = texture2D(texture, vLayer.xy).x;
-
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0) * min(0.4, a - vLayer.z);
 }
     |]
 
