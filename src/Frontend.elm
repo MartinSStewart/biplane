@@ -38,6 +38,7 @@ import Math.Vector4 as Vec4 exposing (Vec4)
 import Point2d
 import Point3d exposing (Point3d)
 import Quantity exposing (Product, Quantity(..), Rate)
+import Set
 import TriangularMesh
 import Types exposing (..)
 import Unsafe
@@ -504,22 +505,37 @@ pointToBrick point brickSize color existingBricks =
                 (round (point2.x / grid.x))
                 (round (point2.y / grid.y))
 
+        gridZ =
+            floor (point2.z / grid.z)
+
         a =
             { min = gridPos, max = Coord.plus brickSize gridPos }
+
+        z =
+            List.foldl
+                (\brick list ->
+                    if brickOverlap a brick then
+                        brick.z :: list
+
+                    else
+                        list
+                )
+                []
+                existingBricks
+                |> List.sort
+                |> List.foldl
+                    (\z2 state ->
+                        if z2 - gridZ <= 0 || z2 - state == 0 then
+                            z2 + 1
+
+                        else
+                            state
+                    )
+                    0
     in
     { min = gridPos
     , max = Coord.plus brickSize gridPos
-    , z =
-        List.foldl
-            (\brick z ->
-                if brickOverlap a brick then
-                    max z (brick.z + 1)
-
-                else
-                    z
-            )
-            0
-            existingBricks
+    , z = z
     , color = color
     }
 
@@ -546,16 +562,16 @@ brickOverlap a b =
         && ((by0 - ay0 <= 0 && ay0 - by1 < 0) || (by0 - ay1 < 0 && ay1 - by1 <= 0))
 
 
-leftAndRightInputs : List XrInput -> ( Maybe XrInput, Maybe XrInput )
+leftAndRightInputs : List XrInput -> ( Maybe Input2, Maybe Input2 )
 leftAndRightInputs inputs =
     List.foldl
         (\input ( left, right ) ->
             case input.handedness of
                 WebGL.LeftHand ->
-                    ( Just input, right )
+                    ( Just (inputToButtons input), right )
 
                 WebGL.RightHand ->
-                    ( left, Just input )
+                    ( left, Just (inputToButtons input) )
 
                 WebGL.Unknown ->
                     ( left, right )
@@ -564,22 +580,52 @@ leftAndRightInputs inputs =
         inputs
 
 
+type alias Input2 =
+    { trigger : Float
+    , sideTrigger : Float
+    , aButton : Bool
+    , bButton : Bool
+    , matrix : Maybe Mat4
+    }
+
+
+inputToButtons : WebGL.XrInput -> Input2
+inputToButtons input =
+    case input.buttons of
+        trigger :: sideTrigger :: aButton :: bButton :: _ ->
+            { trigger = trigger.value
+            , sideTrigger = sideTrigger.value
+            , aButton = aButton.isPressed
+            , bButton = bButton.isPressed
+            , matrix = input.matrix
+            }
+
+        _ ->
+            { trigger = 0
+            , sideTrigger = 0
+            , aButton = False
+            , bButton = False
+            , matrix = input.matrix
+            }
+
+
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 vrUpdate pose model =
     let
         ( maybeLeftInput, maybeRightInput ) =
             leftAndRightInputs pose.inputs
 
+        elapsedTime =
+            Duration.from model.lastVrUpdate pose.time
+
+        sameBoundary =
+            model.previousBoundary == pose.boundary
+
         holdingLeftTrigger : Bool
         holdingLeftTrigger =
             case maybeLeftInput of
-                Just leftInput ->
-                    case List.Extra.getAt 0 leftInput.buttons of
-                        Just button ->
-                            button.value > 0.5
-
-                        Nothing ->
-                            False
+                Just input ->
+                    input.trigger > 0.5
 
                 Nothing ->
                     False
@@ -587,22 +633,11 @@ vrUpdate pose model =
         holdingRightTrigger : Bool
         holdingRightTrigger =
             case maybeRightInput of
-                Just leftInput ->
-                    case List.Extra.getAt 0 leftInput.buttons of
-                        Just button ->
-                            button.value > 0.5
-
-                        Nothing ->
-                            False
+                Just input ->
+                    input.trigger > 0.5
 
                 Nothing ->
                     False
-
-        elapsedTime =
-            Duration.from model.lastVrUpdate pose.time
-
-        sameBoundary =
-            model.previousBoundary == pose.boundary
 
         ( brickMesh2, bricks2 ) =
             case model.lastUsedInput of
@@ -669,10 +704,10 @@ vrUpdate pose model =
       , startTime = model.startTime
       , previousBoundary = pose.boundary
       , lastUsedInput =
-            if holdingLeftTrigger && model.holdingLeftTrigger then
+            if holdingLeftTrigger && not model.holdingLeftTrigger then
                 WebGL.LeftHand
 
-            else if holdingRightTrigger && model.holdingRightTrigger then
+            else if holdingRightTrigger && not model.holdingRightTrigger then
                 WebGL.RightHand
 
             else
