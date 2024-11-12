@@ -40,6 +40,7 @@ import Point2d
 import Point3d exposing (Point3d)
 import Ports
 import Quantity exposing (Product, Quantity(..), Rate)
+import Round
 import Set
 import TriangularMesh
 import Types exposing (..)
@@ -676,19 +677,23 @@ noInput =
     , aButton = False
     , bButton = False
     , matrix = Nothing
+    , joystickX = 0
+    , joystickY = 0
     }
 
 
 inputToButtons : WebGL.XrInput -> Input2
 inputToButtons input =
-    case input.buttons of
-        trigger :: sideTrigger :: _ :: joystickButton :: aButton :: bButton :: _ ->
+    case ( input.buttons, input.axes ) of
+        ( trigger :: sideTrigger :: _ :: joystickButton :: aButton :: bButton :: _, _ :: _ :: joystickX :: joystickY :: _ ) ->
             { trigger = trigger.value
             , joystickButton = joystickButton.isPressed
             , sideTrigger = sideTrigger.value
             , aButton = aButton.isPressed
             , bButton = bButton.isPressed
             , matrix = input.matrix
+            , joystickX = joystickX
+            , joystickY = joystickY
             }
 
         _ ->
@@ -767,6 +772,32 @@ vrUpdate pose model =
 
             else
                 ( False, bricks2 )
+
+        brickSizeX : Int
+        brickSizeX =
+            if leftInput.joystickX > 0.5 && model.previousLeftInput.joystickX <= 0.5 then
+                Coord.x model.brickSize + 1 |> min 6
+
+            else if leftInput.joystickX < -0.5 && model.previousLeftInput.joystickX >= -0.5 then
+                Coord.x model.brickSize - 1 |> max 1
+
+            else
+                Coord.x model.brickSize
+
+        brickSizeY : Int
+        brickSizeY =
+            if leftInput.joystickY > 0.5 && model.previousLeftInput.joystickY <= 0.5 then
+                Coord.y model.brickSize - 1 |> max 1
+
+            else if leftInput.joystickY < -0.5 && model.previousLeftInput.joystickY >= -0.5 then
+                Coord.y model.brickSize + 1 |> min 6
+
+            else
+                Coord.y model.brickSize
+
+        brickSize2 : Coord units
+        brickSize2 =
+            Coord.xy brickSizeX brickSizeY
     in
     ( { key = model.key
       , time = pose.time
@@ -774,10 +805,10 @@ vrUpdate pose model =
       , fontTexture = model.fontTexture
       , brickSize =
             if rightInput.aButton && not model.previousRightInput.aButton then
-                Coord.xy (Coord.y model.brickSize) (Coord.x model.brickSize)
+                Coord.xy (Coord.y brickSize2) (Coord.x brickSize2)
 
             else
-                model.brickSize
+                brickSize2
       , bricks = bricks3
       , brickMesh =
             if maybeBrick /= Nothing || meshChanged2 then
@@ -1351,7 +1382,7 @@ varying vec2 vSize;
 
 void main () {
     vec2 tVec = vUvCoord;
-    vec2 threshold = 0.08 / vSize;
+    vec2 threshold = 0.05 / vSize;
     gl_FragColor =
         vec4(vColor.rgb *
             ((tVec.x < threshold.x

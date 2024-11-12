@@ -403,7 +403,7 @@ type alias XrPose =
 
 
 type alias XrInput =
-    { handedness : XrHandedness, matrix : Maybe Mat4, buttons : List XrButton, mapping : String }
+    { handedness : XrHandedness, matrix : Maybe Mat4, buttons : List XrButton, axes : List Float, mapping : String }
 
 
 type XrHandedness
@@ -540,6 +540,7 @@ inputFromInternal input =
     , matrix = Maybe.map (\a -> Mat4.mul (Mat4.mul zUpMatInverse a) zUpInputMat) input.matrix
     , mapping = input.mapping
     , buttons = input.buttons
+    , axes = input.axes
     }
 
 

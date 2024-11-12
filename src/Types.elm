@@ -50,6 +50,8 @@ type alias Input2 =
     , aButton : Bool
     , bButton : Bool
     , matrix : Maybe Mat4
+    , joystickX : Float
+    , joystickY : Float
     }
 
 
