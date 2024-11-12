@@ -32,13 +32,14 @@ type alias FrontendModel =
     , fontTexture : LoadStatus Effect.WebGL.Texture.Error Texture
     , brickSize : Coord GridUnit
     , bricks : List Brick
-    , brickMesh : Effect.WebGL.Mesh Vertex
+    , brickMesh : Effect.WebGL.Mesh BrickVertex
     , lastUsedInput : Effect.WebGL.XrHandedness
     , previousLeftInput : Input2
     , previousRightInput : Input2
     , soundsLoaded : Bool
     , consoleLog : String
     , consoleLogMesh : Effect.WebGL.Mesh LabelVertex
+    , lastPlacedBrick : Maybe Brick
     }
 
 
@@ -90,6 +91,14 @@ type alias Vertex =
     , color : Vec4
     , normal : Vec3
     , shininess : Float
+    }
+
+
+type alias BrickVertex =
+    { position : Vec3
+    , color : Vec4
+    , uvCoord : Vec2
+    , size : Vec2
     }
 
 

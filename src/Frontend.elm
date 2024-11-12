@@ -35,6 +35,7 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Math.Vector4 as Vec4 exposing (Vec4)
+import Maybe.Extra
 import Point2d
 import Point3d exposing (Point3d)
 import Ports
@@ -76,6 +77,11 @@ app =
 gridUnitSize : Vector3d Meters World
 gridUnitSize =
     Vector3d.millimeters 32 32 20
+
+
+gridZRatio : Float
+gridZRatio =
+    Quantity.ratio (Vector3d.zComponent gridUnitSize) (Vector3d.xComponent gridUnitSize)
 
 
 cube : Point3d u c -> Vector3d u c -> Vec4 -> List Vertex
@@ -167,6 +173,126 @@ cube position size color =
     ]
 
 
+brickMesh : Brick -> List BrickVertex
+brickMesh brick =
+    let
+        color =
+            brick.color
+
+        ( Quantity minX, Quantity minY ) =
+            brick.min
+
+        ( Quantity maxX, Quantity maxY ) =
+            brick.max
+
+        gridSizeX =
+            toFloat (maxX - minX)
+
+        gridSizeY =
+            toFloat (maxY - minY)
+
+        gSize : { x : Float, y : Float, z : Float }
+        gSize =
+            Vector3d.toMeters gridUnitSize
+
+        px =
+            gSize.x * toFloat minX
+
+        py =
+            gSize.y * toFloat minY
+
+        pz =
+            gSize.z * toFloat brick.z
+
+        sx =
+            gSize.x * toFloat (maxX - minX)
+
+        sy =
+            gSize.y * toFloat (maxY - minY)
+
+        sz =
+            gSize.z
+
+        v000 =
+            Vec3.vec3 px py pz
+
+        v100 =
+            Vec3.vec3 (px + sx) py pz
+
+        v010 =
+            Vec3.vec3 px (py + sy) pz
+
+        v110 =
+            Vec3.vec3 (px + sx) (py + sy) pz
+
+        v001 =
+            Vec3.vec3 px py (pz + sz)
+
+        v101 =
+            Vec3.vec3 (px + sx) py (pz + sz)
+
+        v011 =
+            Vec3.vec3 px (py + sy) (pz + sz)
+
+        v111 =
+            Vec3.vec3 (px + sx) (py + sy) (pz + sz)
+
+        up =
+            Vec3.vec3 0 0 1
+
+        down =
+            Vec3.vec3 0 0 -1
+
+        front =
+            Vec3.vec3 0 1 0
+
+        back =
+            Vec3.vec3 0 -1 0
+
+        right =
+            Vec3.vec3 1 0 0
+
+        left =
+            Vec3.vec3 -1 0 0
+    in
+    [ -- down
+      { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridSizeY }
+    , { position = v100, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridSizeY }
+    , { position = v110, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridSizeY }
+    , { position = v010, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridSizeY }
+
+    -- up
+    , { position = v001, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridSizeY }
+    , { position = v011, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridSizeY }
+    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridSizeY }
+    , { position = v101, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridSizeY }
+
+    -- left
+    , { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v010, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v011, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v001, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeY gridZRatio }
+
+    -- right
+    , { position = v100, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v101, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v110, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeY gridZRatio }
+
+    -- front
+    , { position = v010, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v110, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v011, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridZRatio }
+
+    -- back
+    , { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v001, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v101, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v100, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridZRatio }
+    ]
+
+
 red =
     Vec4.vec4 0.8 0 0 1
 
@@ -192,6 +318,7 @@ init url key =
       , soundsLoaded = False
       , consoleLog = ""
       , consoleLogMesh = WebGL.indexedTriangles [] []
+      , lastPlacedBrick = Nothing
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -243,53 +370,6 @@ bayerTexture =
             }
             ( size, size )
             Effect.WebGL.Texture.luminance
-        |> Unsafe.assumeOk
-
-
-cloudTextureSize =
-    256
-
-
-cloudTexture : Effect.WebGL.Texture.Texture
-cloudTexture =
-    List.range 0 (cloudTextureSize * cloudTextureSize - 1)
-        |> List.concatMap
-            (\index ->
-                let
-                    x =
-                        modBy cloudTextureSize index
-
-                    y =
-                        index // cloudTextureSize
-
-                    halfSize =
-                        cloudTextureSize / 2
-
-                    centerDistance : Int
-                    centerDistance =
-                        sqrt ((toFloat x - halfSize) ^ 2 + (toFloat y - halfSize) ^ 2)
-                            |> (\a -> 256 - a * 2)
-                            |> clamp 0 255
-                            |> round
-                in
-                [ Bytes.Encode.unsignedInt8 255
-                , Bytes.Encode.unsignedInt8 255
-                , Bytes.Encode.unsignedInt8 255
-                , Bytes.Encode.unsignedInt8 centerDistance
-                ]
-            )
-        |> Bytes.Encode.sequence
-        |> Bytes.Encode.encode
-        |> Effect.WebGL.Texture.loadBytesWith
-            { magnify = Effect.WebGL.Texture.linear
-            , minify = Effect.WebGL.Texture.linear
-            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-            , verticalWrap = Effect.WebGL.Texture.clampToEdge
-            , flipY = False
-            , premultiplyAlpha = True
-            }
-            ( cloudTextureSize, cloudTextureSize )
-            Effect.WebGL.Texture.rgba
         |> Unsafe.assumeOk
 
 
@@ -496,33 +576,6 @@ textMesh position text =
         |> (\( a, _, _ ) -> quadsToMesh a)
 
 
-brickToMesh : Brick -> List Vertex
-brickToMesh brick =
-    let
-        ( Quantity minX, Quantity minY ) =
-            brick.min
-
-        ( Quantity maxX, Quantity maxY ) =
-            brick.max
-
-        s : { x : Float, y : Float, z : Float }
-        s =
-            Vector3d.toMeters gridUnitSize
-    in
-    cube
-        (Point3d.meters
-            (s.x * toFloat minX)
-            (s.y * toFloat minY)
-            (s.z * toFloat brick.z)
-        )
-        (Vector3d.meters
-            (s.x * toFloat (maxX - minX))
-            (s.y * toFloat (maxY - minY))
-            s.z
-        )
-        brick.color
-
-
 pointToBrick : Point3d Meters World -> Coord GridUnit -> Vec4 -> List Brick -> Brick
 pointToBrick point brickSize color existingBricks =
     let
@@ -642,6 +695,32 @@ inputToButtons input =
             noInput
 
 
+placeBrick : Input2 -> Bool -> Bool -> FrontendModel -> Maybe Brick
+placeBrick leftInput pressedLeftTrigger leftTriggerHeld model =
+    case ( leftInput.matrix, pressedLeftTrigger, leftTriggerHeld ) of
+        ( Just matrix, True, _ ) ->
+            pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks |> Just
+
+        ( Just matrix, False, True ) ->
+            case model.lastPlacedBrick of
+                Just lastPlacedBrick ->
+                    let
+                        brick =
+                            pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                    in
+                    if brickOverlap lastPlacedBrick brick then
+                        Nothing
+
+                    else
+                        Just brick
+
+                Nothing ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 vrUpdate pose model =
     let
@@ -654,50 +733,33 @@ vrUpdate pose model =
         sameBoundary =
             model.previousBoundary == pose.boundary
 
+        leftTriggerHeld =
+            leftInput.trigger > 0.5
+
+        rightTriggerHeld =
+            rightInput.trigger > 0.5
+
         pressedLeftTrigger =
-            leftInput.trigger > 0.5 && model.previousLeftInput.trigger <= 0.5
+            leftTriggerHeld && model.previousLeftInput.trigger <= 0.5
 
         pressedRightTrigger =
-            rightInput.trigger > 0.5 && model.previousRightInput.trigger <= 0.5
+            rightTriggerHeld && model.previousRightInput.trigger <= 0.5
 
-        ( meshChanged, bricks2 ) =
+        maybeBrick : Maybe Brick
+        maybeBrick =
             case model.lastUsedInput of
                 WebGL.LeftHand ->
-                    if pressedLeftTrigger then
-                        let
-                            _ =
-                                Debug.log "a" "b"
-                        in
-                        case leftInput.matrix of
-                            Just matrix ->
-                                ( True
-                                , pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
-                                    :: model.bricks
-                                )
-
-                            Nothing ->
-                                ( False, model.bricks )
-
-                    else
-                        ( False, model.bricks )
+                    placeBrick leftInput pressedLeftTrigger leftTriggerHeld model
 
                 WebGL.RightHand ->
-                    if pressedRightTrigger then
-                        case rightInput.matrix of
-                            Just matrix ->
-                                ( True
-                                , pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
-                                    :: model.bricks
-                                )
-
-                            Nothing ->
-                                ( False, model.bricks )
-
-                    else
-                        ( False, model.bricks )
+                    placeBrick rightInput pressedRightTrigger rightTriggerHeld model
 
                 WebGL.Unknown ->
-                    ( False, model.bricks )
+                    Nothing
+
+        bricks2 : List Brick
+        bricks2 =
+            Maybe.Extra.toList maybeBrick ++ model.bricks
 
         ( meshChanged2, bricks3 ) =
             if leftInput.aButton && not model.previousLeftInput.aButton then
@@ -718,8 +780,8 @@ vrUpdate pose model =
                 model.brickSize
       , bricks = bricks3
       , brickMesh =
-            if meshChanged || meshChanged2 then
-                List.foldl (\brick mesh -> brickToMesh brick ++ mesh) [] bricks3 |> quadsToMesh
+            if maybeBrick /= Nothing || meshChanged2 then
+                List.foldl (\brick mesh -> brickMesh brick ++ mesh) [] bricks3 |> quadsToMesh
 
             else
                 model.brickMesh
@@ -763,6 +825,24 @@ vrUpdate pose model =
       , soundsLoaded = model.soundsLoaded
       , consoleLog = model.consoleLog
       , consoleLogMesh = model.consoleLogMesh
+      , lastPlacedBrick =
+            case maybeBrick of
+                Just brick ->
+                    Just brick
+
+                Nothing ->
+                    case ( model.lastUsedInput, leftTriggerHeld, rightTriggerHeld ) of
+                        ( WebGL.LeftHand, False, _ ) ->
+                            Nothing
+
+                        ( WebGL.RightHand, _, False ) ->
+                            Nothing
+
+                        ( _, False, False ) ->
+                            Nothing
+
+                        _ ->
+                            model.lastPlacedBrick
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
@@ -782,6 +862,12 @@ vrUpdate pose model =
 
           else
             Command.none
+        , case maybeBrick of
+            Just _ ->
+                Ports.playSound "pop"
+
+            Nothing ->
+                Command.none
         ]
     )
 
@@ -1019,13 +1105,12 @@ entities model =
                             [ DepthTest.default
                             , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
                             ]
-                            vertexShader
-                            fragmentShader
+                            brickVertexShader
+                            brickFragmentShader
                             model.brickMesh
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
                             , modelTransform = Mat4.identity
-                            , cameraPosition = viewPosition
                             }
                         ]
                             ++ (case model.lastUsedInput of
@@ -1096,10 +1181,10 @@ drawPreviewBrick viewPosition xrView matrix model =
         , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
         , blend
         ]
-        vertexShader
-        fragmentShader
+        brickVertexShader
+        brickFragmentShader
         (pointToBrick (mat4ToPoint3d matrix) model.brickSize (Vec4.vec4 0.2 0.2 1 0.3) model.bricks
-            |> brickToMesh
+            |> brickMesh
             |> quadsToMesh
         )
         { perspective = xrView.projectionMatrix
@@ -1216,16 +1301,68 @@ type alias Uniforms =
     { perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4, cameraPosition : Vec3 }
 
 
-type alias CloudUniforms =
-    { perspective : Mat4, viewMatrix : Mat4, texture : Texture }
-
-
 
 -- Shaders
 
 
 type alias Varying =
     { vColor : Vec4, vNormal : Vec3, vPosition : Vec3, vCameraPosition : Vec3, vShininess : Float }
+
+
+type alias BrickVarying =
+    { vColor : Vec4, vPosition : Vec3, vUvCoord : Vec2, vSize : Vec2 }
+
+
+brickVertexShader : Shader BrickVertex { a | perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 } BrickVarying
+brickVertexShader =
+    [glsl|
+attribute vec3 position;
+attribute vec4 color;
+attribute vec2 uvCoord;
+attribute vec2 size;
+
+uniform mat4 modelTransform;
+uniform mat4 viewMatrix;
+uniform mat4 perspective;
+
+varying vec4 vColor;
+varying vec3 vPosition;
+varying vec2 vUvCoord;
+varying vec2 vSize;
+
+void main(void) {
+    gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
+    vColor = color;
+    vPosition = (modelTransform * vec4(position, 1.0)).xyz;
+    vUvCoord = uvCoord;
+    vSize = size;
+}
+    |]
+
+
+brickFragmentShader : Shader {} a BrickVarying
+brickFragmentShader =
+    [glsl|
+precision mediump float;
+varying vec4 vColor;
+varying vec3 vPosition;
+varying vec2 vUvCoord;
+varying vec2 vSize;
+
+void main () {
+    vec2 tVec = vUvCoord;
+    vec2 threshold = 0.08 / vSize;
+    gl_FragColor =
+        vec4(vColor.rgb *
+            ((tVec.x < threshold.x
+                || tVec.x > (1.0 - threshold.x)
+                || tVec.y < threshold.y
+                || tVec.y > (1.0 - threshold.y))
+                    ? 0.7
+                    : 1.0)
+            , vColor.a);
+}
+    |]
 
 
 vertexShader : Shader Vertex Uniforms Varying
