@@ -36,6 +36,7 @@ type alias FrontendModel =
     , lastUsedInput : Effect.WebGL.XrHandedness
     , previousLeftInput : Input2
     , previousRightInput : Input2
+    , soundsLoaded : Bool
     }
 
 
@@ -108,6 +109,7 @@ type FrontendMsg
     | TriggeredEndXrSession
     | GotStartTime Time.Posix
     | GotFontTexture (Result Effect.WebGL.Texture.Error Texture)
+    | SoundsLoaded
 
 
 type ToBackend

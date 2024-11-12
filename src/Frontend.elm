@@ -37,6 +37,7 @@ import Math.Vector3 as Vec3 exposing (Vec3)
 import Math.Vector4 as Vec4 exposing (Vec4)
 import Point2d
 import Point3d exposing (Point3d)
+import Ports
 import Quantity exposing (Product, Quantity(..), Rate)
 import Set
 import TriangularMesh
@@ -65,6 +66,7 @@ app =
                       else
                         Effect.Browser.Events.onAnimationFrame AnimationFrame
                     , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
+                    , Ports.soundsLoaded SoundsLoaded
                     ]
         , view = view
         }
@@ -186,6 +188,7 @@ init url key =
       , lastUsedInput = WebGL.LeftHand
       , previousLeftInput = noInput
       , previousRightInput = noInput
+      , soundsLoaded = False
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -199,6 +202,7 @@ init url key =
             }
             "/dinProMedium.png"
             |> Task.attempt GotFontTexture
+        , Ports.loadSounds
         ]
     )
 
@@ -311,9 +315,16 @@ update msg model =
             ( { model | time = time }, Command.none )
 
         PressedEnterVr ->
-            ( model
-            , WebGL.requestXrStart [ WebGL.clearColor 0.5 0.6 1 1, WebGL.depth 1 ] |> Task.attempt StartedXr
-            )
+            if model.soundsLoaded then
+                ( model
+                , Command.batch
+                    [ WebGL.requestXrStart [ WebGL.clearColor 0.5 0.6 1 1, WebGL.depth 1 ] |> Task.attempt StartedXr
+                    , Ports.playSound "pop"
+                    ]
+                )
+
+            else
+                ( model, Command.none )
 
         StartedXr result ->
             case result of
@@ -379,6 +390,9 @@ update msg model =
               }
             , Command.none
             )
+
+        SoundsLoaded ->
+            ( { model | soundsLoaded = True }, Command.none )
 
 
 fontTextureWidth =
@@ -502,8 +516,8 @@ pointToBrick point brickSize color existingBricks =
         gridPos : Coord GridUnit
         gridPos =
             Coord.xy
-                (round (point2.x / grid.x))
-                (round (point2.y / grid.y))
+                (floor (point2.x / grid.x))
+                (floor (point2.y / grid.y))
 
         gridZ =
             floor (point2.z / grid.z)
@@ -671,7 +685,12 @@ vrUpdate pose model =
       , time = pose.time
       , isInVr = model.isInVr
       , fontTexture = model.fontTexture
-      , brickSize = model.brickSize
+      , brickSize =
+            if rightInput.aButton && not model.previousRightInput.aButton then
+                Coord.xy (Coord.y model.brickSize) (Coord.x model.brickSize)
+
+            else
+                model.brickSize
       , bricks = bricks3
       , brickMesh =
             if meshChanged || meshChanged2 then
@@ -716,10 +735,10 @@ vrUpdate pose model =
                 model.lagWarning
       , previousLeftInput = leftInput
       , previousRightInput = rightInput
+      , soundsLoaded = model.soundsLoaded
       }
     , Command.batch
-        [ WebGL.renderXrFrame (entities model)
-            |> Task.attempt RenderedXrFrame
+        [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
         , if
             List.any
                 (\input ->
@@ -885,7 +904,11 @@ view model =
             Html.div
                 [ Html.Attributes.style "font-size" "30px", Html.Attributes.style "font-family" "sans-serif" ]
                 [ Html.text "Not in VR "
-                , Html.button [ Html.Events.onClick PressedEnterVr, Html.Attributes.style "font-size" "30px" ] [ Html.text "Enter VR" ]
+                , if model.soundsLoaded then
+                    Html.button [ Html.Events.onClick PressedEnterVr, Html.Attributes.style "font-size" "30px" ] [ Html.text "Enter VR" ]
+
+                  else
+                    Html.text "(Loading...)"
                 , " App started " ++ String.fromInt (round (Duration.inSeconds elapsed)) ++ " seconds ago" |> Html.text
                 ]
         ]
