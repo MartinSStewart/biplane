@@ -37,6 +37,8 @@ type alias FrontendModel =
     , previousLeftInput : Input2
     , previousRightInput : Input2
     , soundsLoaded : Bool
+    , consoleLog : String
+    , consoleLogMesh : Effect.WebGL.Mesh LabelVertex
     }
 
 
@@ -91,6 +93,10 @@ type alias Vertex =
     }
 
 
+type alias LabelVertex =
+    { position : Vec3, texCoord : Vec2 }
+
+
 type alias BackendModel =
     { message : String
     }
@@ -110,6 +116,7 @@ type FrontendMsg
     | GotStartTime Time.Posix
     | GotFontTexture (Result Effect.WebGL.Texture.Error Texture)
     | SoundsLoaded
+    | GotConsoleLog String
 
 
 type ToBackend

@@ -67,6 +67,7 @@ app =
                         Effect.Browser.Events.onAnimationFrame AnimationFrame
                     , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
                     , Ports.soundsLoaded SoundsLoaded
+                    , Ports.gotConsoleLog GotConsoleLog
                     ]
         , view = view
         }
@@ -189,6 +190,8 @@ init url key =
       , previousLeftInput = noInput
       , previousRightInput = noInput
       , soundsLoaded = False
+      , consoleLog = ""
+      , consoleLogMesh = WebGL.indexedTriangles [] []
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -394,6 +397,19 @@ update msg model =
         SoundsLoaded ->
             ( { model | soundsLoaded = True }, Command.none )
 
+        GotConsoleLog log ->
+            let
+                log2 : String
+                log2 =
+                    model.consoleLog ++ "\n" ++ log |> String.right 300
+            in
+            ( { model
+                | consoleLog = log2
+                , consoleLogMesh = textMesh (Point3d.meters 0 0 -1) log2
+              }
+            , Command.none
+            )
+
 
 fontTextureWidth =
     1024
@@ -403,76 +419,81 @@ fontTextureHeight =
     1024
 
 
-helloWorld =
-    textMesh (Vector3d.meters 0 0 -1) "Hello World"
-
-
-textMesh : Vector3d Meters World -> String -> Mesh LabelVertex
+textMesh : Point3d Meters World -> String -> Mesh LabelVertex
 textMesh position text =
     let
         pos =
-            Vector3d.toMeters position
+            Point3d.toMeters position
     in
     String.foldl
-        (\char ( vertices, xOffset ) ->
-            case Dict.get char Font.font.glyphs of
-                Just glyph ->
-                    if char == ' ' then
-                        ( vertices, xOffset + glyph.xAdvance )
+        (\char ( vertices, xOffset, yOffset ) ->
+            case char of
+                ' ' ->
+                    case Dict.get char Font.font.glyphs of
+                        Just glyph ->
+                            ( vertices, xOffset + glyph.xAdvance, yOffset )
 
-                    else
-                        let
-                            scaleAdjust =
-                                0.002
+                        Nothing ->
+                            ( vertices, xOffset, yOffset )
 
-                            x0 =
-                                toFloat (glyph.xOffset + xOffset) * scaleAdjust + pos.x
+                '\n' ->
+                    ( vertices, 0, yOffset + 70 )
 
-                            y0 =
-                                -(toFloat glyph.yOffset * scaleAdjust) + pos.y
+                _ ->
+                    case Dict.get char Font.font.glyphs of
+                        Just glyph ->
+                            let
+                                scaleAdjust =
+                                    0.002
 
-                            x1 =
-                                toFloat (glyph.xOffset + glyph.width + xOffset) * scaleAdjust + pos.x
+                                x0 =
+                                    toFloat (glyph.xOffset + xOffset) * scaleAdjust + pos.x
 
-                            y1 =
-                                -(toFloat (glyph.yOffset + glyph.height) * scaleAdjust) + pos.y
+                                y0 =
+                                    -(toFloat (glyph.yOffset + yOffset) * scaleAdjust) + pos.y
 
-                            texX0 =
-                                toFloat glyph.x / fontTextureWidth
+                                x1 =
+                                    toFloat (glyph.xOffset + glyph.width + xOffset) * scaleAdjust + pos.x
 
-                            texY0 =
-                                1 - toFloat glyph.y / fontTextureHeight
+                                y1 =
+                                    -(toFloat (glyph.yOffset + glyph.height + yOffset) * scaleAdjust) + pos.y
 
-                            texX1 =
-                                toFloat (glyph.x + glyph.width) / fontTextureWidth
+                                texX0 =
+                                    toFloat glyph.x / fontTextureWidth
 
-                            texY1 =
-                                1 - toFloat (glyph.y + glyph.height) / fontTextureHeight
-                        in
-                        ( [ { position = Vec3.vec3 x0 y0 pos.z
-                            , texCoord = Vec2.vec2 texX0 texY0
-                            }
-                          , { position = Vec3.vec3 x0 y1 pos.z
-                            , texCoord = Vec2.vec2 texX0 texY1
-                            }
-                          , { position = Vec3.vec3 x1 y1 pos.z
-                            , texCoord = Vec2.vec2 texX1 texY1
-                            }
-                          , { position = Vec3.vec3 x1 y0 pos.z
-                            , texCoord = Vec2.vec2 texX1 texY0
-                            }
-                          ]
-                            ++ vertices
-                        , xOffset + glyph.xAdvance
-                        )
+                                texY0 =
+                                    1 - toFloat glyph.y / fontTextureHeight
 
-                Nothing ->
-                    ( vertices, xOffset )
+                                texX1 =
+                                    toFloat (glyph.x + glyph.width) / fontTextureWidth
+
+                                texY1 =
+                                    1 - toFloat (glyph.y + glyph.height) / fontTextureHeight
+                            in
+                            ( [ { position = Vec3.vec3 x0 y0 pos.z
+                                , texCoord = Vec2.vec2 texX0 texY0
+                                }
+                              , { position = Vec3.vec3 x0 y1 pos.z
+                                , texCoord = Vec2.vec2 texX0 texY1
+                                }
+                              , { position = Vec3.vec3 x1 y1 pos.z
+                                , texCoord = Vec2.vec2 texX1 texY1
+                                }
+                              , { position = Vec3.vec3 x1 y0 pos.z
+                                , texCoord = Vec2.vec2 texX1 texY0
+                                }
+                              ]
+                                ++ vertices
+                            , xOffset + glyph.xAdvance
+                            , yOffset
+                            )
+
+                        Nothing ->
+                            ( vertices, xOffset, yOffset )
         )
-        ( [], 0 )
+        ( [], 0, 0 )
         text
-        |> Tuple.first
-        |> quadsToMesh
+        |> (\( a, _, _ ) -> quadsToMesh a)
 
 
 brickToMesh : Brick -> List Vertex
@@ -643,6 +664,10 @@ vrUpdate pose model =
             case model.lastUsedInput of
                 WebGL.LeftHand ->
                     if pressedLeftTrigger then
+                        let
+                            _ =
+                                Debug.log "a" "b"
+                        in
                         case leftInput.matrix of
                             Just matrix ->
                                 ( True
@@ -736,6 +761,8 @@ vrUpdate pose model =
       , previousLeftInput = leftInput
       , previousRightInput = rightInput
       , soundsLoaded = model.soundsLoaded
+      , consoleLog = model.consoleLog
+      , consoleLogMesh = model.consoleLogMesh
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
@@ -965,7 +992,7 @@ entities model =
                             ]
                             labelVertexShader
                             labelFragmentShader
-                            helloWorld
+                            model.consoleLogMesh
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
                             , fontTexture = fontTexture
@@ -1313,10 +1340,6 @@ void main(void) {
     gl_FragColor = vec4(0.5, 0.6, 1.0, 1.0);
 }
     |]
-
-
-type alias LabelVertex =
-    { position : Vec3, texCoord : Vec2 }
 
 
 labelVertexShader : Shader LabelVertex { a | viewMatrix : Mat4, perspective : Mat4 } { vTexCoord : Vec2 }
