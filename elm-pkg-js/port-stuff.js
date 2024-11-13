@@ -33,4 +33,14 @@ exports.init = async function(app) {
             source.start(0);
         }
     });
+    app.ports.repeat_sound.subscribe((a) => {
+        if (sounds[a.name]) {
+            for (let i = 0; i < a.count; i++) {
+                const source = context.createBufferSource();
+                source.buffer = sounds[a.name];
+                source.connect(context.destination);
+                source.start((Math.random() * 10 + i * 10) / 1000);
+            }
+        }
+    });
 }

@@ -731,7 +731,6 @@ placeAdjacentBricks time placedBrick existingBricks =
         existingBricks2
         existingBricksBelow
         (findOpenSpots placedBrick.min placedBrick.max newBricks existingBricks2 existingBricksBelow |> SeqSet.fromList)
-        |> List.Nonempty.reverse
 
 
 findOpenSpots : Coord GridUnit -> Coord GridUnit -> Nonempty Brick -> List Brick -> List Brick -> List (Coord GridUnit)
@@ -1031,7 +1030,7 @@ vrUpdate pose model =
                     Just brick
 
                 PlaceMany many ->
-                    Just (List.Nonempty.head many)
+                    Just (List.Nonempty.last many)
 
                 PlaceNone ->
                     case ( model.lastUsedInput, leftTriggerHeld, rightTriggerHeld ) of
@@ -1070,7 +1069,7 @@ vrUpdate pose model =
                 Ports.playSound "pop"
 
             PlaceMany many ->
-                Ports.playSound "pop"
+                Ports.repeatSound "pop" (List.Nonempty.length many)
 
             PlaceNone ->
                 Command.none

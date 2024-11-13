@@ -1,4 +1,4 @@
-port module Ports exposing (gotConsoleLog, loadSounds, playSound, soundsLoaded)
+port module Ports exposing (gotConsoleLog, loadSounds, playSound, repeatSound, soundsLoaded)
 
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -13,6 +13,9 @@ port load_sounds_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port play_sound : Json.Encode.Value -> Cmd msg
+
+
+port repeat_sound : Json.Encode.Value -> Cmd msg
 
 
 port console_log_from_js : (Json.Decode.Value -> msg) -> Sub msg
@@ -43,11 +46,17 @@ soundsLoaded msg =
     Subscription.fromJs
         "load_sounds_from_js"
         load_sounds_from_js
-        (\value ->
-            msg
-        )
+        (\_ -> msg)
 
 
 playSound : String -> Command FrontendOnly toMsg msg
 playSound name =
     Command.sendToJs "play_sound" play_sound (Json.Encode.string name)
+
+
+repeatSound : String -> Int -> Command FrontendOnly toMsg msg
+repeatSound name count =
+    Command.sendToJs
+        "repeat_sound"
+        repeat_sound
+        (Json.Encode.object [ ( "name", Json.Encode.string name ), ( "count", Json.Encode.int count ) ])
