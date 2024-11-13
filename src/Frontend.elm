@@ -710,12 +710,35 @@ type PlaceBrick
 
 placeAdjacentBricks : Brick -> List Brick -> Nonempty Brick
 placeAdjacentBricks placedBrick existingBricks =
+    let
+        existingBricks2 =
+            List.filter (\brick2 -> brick2.z - placedBrick.z == 0 || brick2.z - placedBrick.z == -1) existingBricks
+
+        newBricks =
+            List.Nonempty.singleton placedBrick
+    in
     placeAdjacentBricksHelper
         0
-        (List.Nonempty.singleton placedBrick)
-        (List.filter (\brick2 -> brick2.z - placedBrick.z == 0 || brick2.z - placedBrick.z == -1) existingBricks)
-        SeqSet.empty
+        newBricks
+        existingBricks2
+        (findOpenSpots placedBrick.min placedBrick.max placedBrick.z newBricks existingBricks2 |> SeqSet.fromList)
         |> List.Nonempty.reverse
+
+
+findOpenSpots : Coord GridUnit -> Coord GridUnit -> Int -> Nonempty Brick -> List Brick -> List (Coord GridUnit)
+findOpenSpots brickMin brickMax brickZ newBricks existingBricks =
+    List.concatMap
+        (\x -> [ Coord.xy x (Coord.y brickMin - 1), Coord.xy x (Coord.y brickMax) ])
+        (List.range (Coord.x brickMin) (Coord.x brickMax - 1))
+        ++ List.concatMap
+            (\y -> [ Coord.xy (Coord.x brickMin - 1) y, Coord.xy (Coord.x brickMax) y ])
+            (List.range (Coord.y brickMin) (Coord.y brickMax - 1))
+        |> List.filter
+            (\coord ->
+                not (List.any (brickAtPoint coord brickZ) existingBricks)
+                    && not (List.Nonempty.any (brickAtPoint coord brickZ) newBricks)
+                    && List.any (brickAtPoint coord (brickZ - 1)) existingBricks
+            )
 
 
 placeAdjacentBricksHelper : Int -> Nonempty Brick -> List Brick -> SeqSet (Coord GridUnit) -> Nonempty Brick
@@ -724,38 +747,51 @@ placeAdjacentBricksHelper stepCount newBricks existingBricks openSpots =
         newBricks
 
     else
-        let
-            brick : Brick
-            brick =
-                List.Nonempty.head newBricks
+        case SeqSet.toList openSpots of
+            brickMin :: rest ->
+                let
+                    brickMax : Coord GridUnit
+                    brickMax =
+                        Coord.plus (Coord.xy 1 1) brickMin
 
-            openSpots2 : SeqSet (Coord GridUnit)
-            openSpots2 =
-                List.concatMap
-                    (\x -> [ Coord.xy x (Coord.y brick.min - 1), Coord.xy x (Coord.y brick.max) ])
-                    (List.range (Coord.x brick.min) (Coord.x brick.max - 1))
-                    ++ List.concatMap
-                        (\y -> [ Coord.xy (Coord.x brick.min - 1) y, Coord.xy (Coord.x brick.max) y ])
-                        (List.range (Coord.y brick.min) (Coord.y brick.max - 1))
-                    |> List.filter
-                        (\coord ->
-                            not (List.any (brickAtPoint coord brick.z) existingBricks)
-                                && not (List.Nonempty.any (brickAtPoint coord brick.z) newBricks)
-                                && List.any (brickAtPoint coord (brick.z - 1)) existingBricks
-                        )
-                    |> SeqSet.fromList
-                    |> SeqSet.union openSpots
-        in
-        case SeqSet.toList openSpots2 of
-            head :: rest ->
-                placeAdjacentBricksHelper
-                    (stepCount + 1)
-                    (List.Nonempty.cons
-                        { min = head, max = Coord.plus (Coord.xy 1 1) head, z = brick.z, color = green }
-                        newBricks
-                    )
-                    existingBricks
-                    (SeqSet.fromList rest)
+                    brickZ : Int
+                    brickZ =
+                        (List.Nonempty.head newBricks).z
+                in
+                case findOpenSpots brickMin brickMax brickZ newBricks existingBricks of
+                    head2 :: _ ->
+                        let
+                            brickMin2 : Coord GridUnit
+                            brickMin2 =
+                                Coord.minimum head2 brickMin
+
+                            brickMax2 : Coord GridUnit
+                            brickMax2 =
+                                Coord.maximum (Coord.plus (Coord.xy 1 1) head2) brickMax
+
+                            brick : Brick
+                            brick =
+                                { min = brickMin2, max = brickMax2, z = brickZ, color = green }
+
+                            newOpenSpots : List (Coord GridUnit)
+                            newOpenSpots =
+                                findOpenSpots brickMin2 brickMax2 brickZ newBricks existingBricks
+                        in
+                        placeAdjacentBricksHelper
+                            (stepCount + 1)
+                            (List.Nonempty.cons brick newBricks)
+                            existingBricks
+                            (SeqSet.union (SeqSet.fromList rest |> SeqSet.remove head2) (SeqSet.fromList newOpenSpots))
+
+                    [] ->
+                        placeAdjacentBricksHelper
+                            (stepCount + 1)
+                            (List.Nonempty.cons
+                                { min = brickMin, max = brickMax, z = brickZ, color = green }
+                                newBricks
+                            )
+                            existingBricks
+                            (SeqSet.fromList rest)
 
             [] ->
                 newBricks
@@ -874,7 +910,7 @@ vrUpdate pose model =
         brickSizeX : Int
         brickSizeX =
             if leftInput.joystickX > 0.5 && model.previousLeftInput.joystickX <= 0.5 then
-                Coord.x model.brickSize + 1 |> min 6
+                Coord.x model.brickSize + 1 |> min 4
 
             else if leftInput.joystickX < -0.5 && model.previousLeftInput.joystickX >= -0.5 then
                 Coord.x model.brickSize - 1 |> max 1
@@ -888,7 +924,7 @@ vrUpdate pose model =
                 Coord.y model.brickSize - 1 |> max 1
 
             else if leftInput.joystickY < -0.5 && model.previousLeftInput.joystickY >= -0.5 then
-                Coord.y model.brickSize + 1 |> min 6
+                Coord.y model.brickSize + 1 |> min 4
 
             else
                 Coord.y model.brickSize
