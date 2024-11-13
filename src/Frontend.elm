@@ -176,9 +176,12 @@ cube position size color =
     ]
 
 
-brickMesh : Brick -> List BrickVertex
-brickMesh brick =
+brickMesh : Time.Posix -> Brick -> List BrickVertex
+brickMesh startTime brick =
     let
+        placedAt =
+            Duration.from startTime brick.placedAt |> Duration.inMilliseconds
+
         color =
             brick.color
 
@@ -259,40 +262,40 @@ brickMesh brick =
             Vec3.vec3 -1 0 0
     in
     [ -- down
-      { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridSizeY }
-    , { position = v100, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridSizeY }
-    , { position = v110, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridSizeY }
-    , { position = v010, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridSizeY }
+      { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
+    , { position = v100, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
+    , { position = v110, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
+    , { position = v010, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
 
     -- up
-    , { position = v001, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridSizeY }
-    , { position = v011, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridSizeY }
-    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridSizeY }
-    , { position = v101, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridSizeY }
+    , { position = v001, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
+    , { position = v011, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
+    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
+    , { position = v101, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
 
     -- left
-    , { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeY gridZRatio }
-    , { position = v010, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeY gridZRatio }
-    , { position = v011, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeY gridZRatio }
-    , { position = v001, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
+    , { position = v010, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
+    , { position = v011, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
+    , { position = v001, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
 
     -- right
-    , { position = v100, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeY gridZRatio }
-    , { position = v101, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeY gridZRatio }
-    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeY gridZRatio }
-    , { position = v110, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeY gridZRatio }
+    , { position = v100, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
+    , { position = v101, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
+    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
+    , { position = v110, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeY gridZRatio, placedAt = placedAt }
 
     -- front
-    , { position = v010, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridZRatio }
-    , { position = v110, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridZRatio }
-    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridZRatio }
-    , { position = v011, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v010, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
+    , { position = v110, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
+    , { position = v111, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
+    , { position = v011, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
 
     -- back
-    , { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridZRatio }
-    , { position = v001, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridZRatio }
-    , { position = v101, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridZRatio }
-    , { position = v100, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridZRatio }
+    , { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
+    , { position = v001, color = color, uvCoord = Vec2.vec2 0 1, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
+    , { position = v101, color = color, uvCoord = Vec2.vec2 1 1, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
+    , { position = v100, color = color, uvCoord = Vec2.vec2 1 0, size = Vec2.vec2 gridSizeX gridZRatio, placedAt = placedAt }
     ]
 
 
@@ -579,8 +582,8 @@ textMesh position text =
         |> (\( a, _, _ ) -> quadsToMesh a)
 
 
-pointToBrick : Point3d Meters World -> Coord GridUnit -> Vec4 -> List Brick -> Brick
-pointToBrick point brickSize color existingBricks =
+pointToBrick : Time.Posix -> Point3d Meters World -> Coord GridUnit -> Vec4 -> List Brick -> Brick
+pointToBrick time point brickSize color existingBricks =
     let
         point2 : { x : Float, y : Float, z : Float }
         point2 =
@@ -628,6 +631,7 @@ pointToBrick point brickSize color existingBricks =
     , max = Coord.plus brickSize gridPos
     , z = z
     , color = color
+    , placedAt = time
     }
 
 
@@ -708,25 +712,30 @@ type PlaceBrick
     | PlaceMany (Nonempty Brick)
 
 
-placeAdjacentBricks : Brick -> List Brick -> Nonempty Brick
-placeAdjacentBricks placedBrick existingBricks =
+placeAdjacentBricks : Time.Posix -> Brick -> List Brick -> Nonempty Brick
+placeAdjacentBricks time placedBrick existingBricks =
     let
         existingBricks2 =
-            List.filter (\brick2 -> brick2.z - placedBrick.z == 0 || brick2.z - placedBrick.z == -1) existingBricks
+            List.filter (\brick2 -> brick2.z - placedBrick.z == 0) existingBricks
+
+        existingBricksBelow =
+            List.filter (\brick2 -> brick2.z - placedBrick.z == -1) existingBricks
 
         newBricks =
             List.Nonempty.singleton placedBrick
     in
     placeAdjacentBricksHelper
-        0
+        time
+        1
         newBricks
         existingBricks2
-        (findOpenSpots placedBrick.min placedBrick.max placedBrick.z newBricks existingBricks2 |> SeqSet.fromList)
+        existingBricksBelow
+        (findOpenSpots placedBrick.min placedBrick.max newBricks existingBricks2 existingBricksBelow |> SeqSet.fromList)
         |> List.Nonempty.reverse
 
 
-findOpenSpots : Coord GridUnit -> Coord GridUnit -> Int -> Nonempty Brick -> List Brick -> List (Coord GridUnit)
-findOpenSpots brickMin brickMax brickZ newBricks existingBricks =
+findOpenSpots : Coord GridUnit -> Coord GridUnit -> Nonempty Brick -> List Brick -> List Brick -> List (Coord GridUnit)
+findOpenSpots brickMin brickMax newBricks existingBricks existingBricksBelow =
     List.concatMap
         (\x -> [ Coord.xy x (Coord.y brickMin - 1), Coord.xy x (Coord.y brickMax) ])
         (List.range (Coord.x brickMin) (Coord.x brickMax - 1))
@@ -735,14 +744,21 @@ findOpenSpots brickMin brickMax brickZ newBricks existingBricks =
             (List.range (Coord.y brickMin) (Coord.y brickMax - 1))
         |> List.filter
             (\coord ->
-                not (List.any (brickAtPoint coord brickZ) existingBricks)
-                    && not (List.Nonempty.any (brickAtPoint coord brickZ) newBricks)
-                    && List.any (brickAtPoint coord (brickZ - 1)) existingBricks
+                not (List.any (brickAtPoint coord) existingBricks)
+                    && not (List.Nonempty.any (brickAtPoint coord) newBricks)
+                    && List.any (brickAtPoint coord) existingBricksBelow
             )
 
 
-placeAdjacentBricksHelper : Int -> Nonempty Brick -> List Brick -> SeqSet (Coord GridUnit) -> Nonempty Brick
-placeAdjacentBricksHelper stepCount newBricks existingBricks openSpots =
+placeAdjacentBricksHelper :
+    Time.Posix
+    -> Int
+    -> Nonempty Brick
+    -> List Brick
+    -> List Brick
+    -> SeqSet (Coord GridUnit)
+    -> Nonempty Brick
+placeAdjacentBricksHelper time stepCount newBricks existingBricks existingBricksBelow openSpots =
     if stepCount > 100 then
         newBricks
 
@@ -757,8 +773,12 @@ placeAdjacentBricksHelper stepCount newBricks existingBricks openSpots =
                     brickZ : Int
                     brickZ =
                         (List.Nonempty.head newBricks).z
+
+                    placedAt : Time.Posix
+                    placedAt =
+                        Duration.addTo time (Duration.milliseconds (toFloat stepCount * 5))
                 in
-                case findOpenSpots brickMin brickMax brickZ newBricks existingBricks of
+                case findOpenSpots brickMin brickMax newBricks existingBricks existingBricksBelow of
                     head2 :: _ ->
                         let
                             brickMin2 : Coord GridUnit
@@ -771,26 +791,35 @@ placeAdjacentBricksHelper stepCount newBricks existingBricks openSpots =
 
                             brick : Brick
                             brick =
-                                { min = brickMin2, max = brickMax2, z = brickZ, color = green }
+                                { min = brickMin2
+                                , max = brickMax2
+                                , z = brickZ
+                                , color = green
+                                , placedAt = placedAt
+                                }
 
                             newOpenSpots : List (Coord GridUnit)
                             newOpenSpots =
-                                findOpenSpots brickMin2 brickMax2 brickZ newBricks existingBricks
+                                findOpenSpots brickMin2 brickMax2 newBricks existingBricks existingBricksBelow
                         in
                         placeAdjacentBricksHelper
+                            time
                             (stepCount + 1)
                             (List.Nonempty.cons brick newBricks)
                             existingBricks
+                            existingBricksBelow
                             (SeqSet.union (SeqSet.fromList rest |> SeqSet.remove head2) (SeqSet.fromList newOpenSpots))
 
                     [] ->
                         placeAdjacentBricksHelper
+                            time
                             (stepCount + 1)
                             (List.Nonempty.cons
-                                { min = brickMin, max = brickMax, z = brickZ, color = green }
+                                { min = brickMin, max = brickMax, z = brickZ, color = green, placedAt = placedAt }
                                 newBricks
                             )
                             existingBricks
+                            existingBricksBelow
                             (SeqSet.fromList rest)
 
             [] ->
@@ -801,8 +830,8 @@ green =
     Vec4.vec4 0 1 0 1
 
 
-brickAtPoint : Coord GridUnit -> Int -> Brick -> Bool
-brickAtPoint point z brick =
+brickAtPoint : Coord GridUnit -> Brick -> Bool
+brickAtPoint point brick =
     let
         ( Quantity ax0, Quantity ay0 ) =
             point
@@ -813,19 +842,19 @@ brickAtPoint point z brick =
         ( Quantity bx1, Quantity by1 ) =
             brick.max
     in
-    (bx0 - ax0 <= 0 && ax0 - bx1 < 0) && (by0 - ay0 <= 0 && ay0 - by1 < 0) && (z - brick.z == 0)
+    (bx0 - ax0 <= 0 && ax0 - bx1 < 0) && (by0 - ay0 <= 0 && ay0 - by1 < 0)
 
 
-placeBrick : Input2 -> Bool -> Bool -> FrontendModel -> PlaceBrick
-placeBrick input pressedTrigger triggerHeld model =
+placeBrick : Time.Posix -> Input2 -> Bool -> Bool -> FrontendModel -> PlaceBrick
+placeBrick time input pressedTrigger triggerHeld model =
     case ( input.matrix, pressedTrigger, triggerHeld ) of
         ( Just matrix, True, _ ) ->
             let
                 brick =
-                    pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                    pointToBrick time (mat4ToPoint3d matrix) model.brickSize red model.bricks
             in
             if input.sideTrigger > 0.5 then
-                placeAdjacentBricks brick model.bricks |> PlaceMany
+                placeAdjacentBricks time brick model.bricks |> PlaceMany
 
             else
                 PlaceSingle brick
@@ -835,7 +864,7 @@ placeBrick input pressedTrigger triggerHeld model =
                 Just lastPlacedBrick ->
                     let
                         brick =
-                            pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                            pointToBrick time (mat4ToPoint3d matrix) model.brickSize red model.bricks
                     in
                     if brickOverlap lastPlacedBrick brick then
                         PlaceNone
@@ -856,21 +885,27 @@ vrUpdate pose model =
         ( leftInput, rightInput ) =
             leftAndRightInputs pose.inputs
 
+        elapsedTime : Duration
         elapsedTime =
             Duration.from model.lastVrUpdate pose.time
 
+        sameBoundary : Bool
         sameBoundary =
             model.previousBoundary == pose.boundary
 
+        leftTriggerHeld : Bool
         leftTriggerHeld =
             leftInput.trigger > 0.5
 
+        rightTriggerHeld : Bool
         rightTriggerHeld =
             rightInput.trigger > 0.5
 
+        pressedLeftTrigger : Bool
         pressedLeftTrigger =
             leftTriggerHeld && model.previousLeftInput.trigger <= 0.5
 
+        pressedRightTrigger : Bool
         pressedRightTrigger =
             rightTriggerHeld && model.previousRightInput.trigger <= 0.5
 
@@ -878,10 +913,10 @@ vrUpdate pose model =
         maybeBrick =
             case model.lastUsedInput of
                 WebGL.LeftHand ->
-                    placeBrick leftInput pressedLeftTrigger leftTriggerHeld model
+                    placeBrick pose.time leftInput pressedLeftTrigger leftTriggerHeld model
 
                 WebGL.RightHand ->
-                    placeBrick rightInput pressedRightTrigger rightTriggerHeld model
+                    placeBrick pose.time rightInput pressedRightTrigger rightTriggerHeld model
 
                 WebGL.Unknown ->
                     PlaceNone
@@ -946,7 +981,7 @@ vrUpdate pose model =
       , bricks = bricks3
       , brickMesh =
             if maybeBrick /= PlaceNone || meshChanged2 then
-                List.foldl (\brick mesh -> brickMesh brick ++ mesh) [] bricks3 |> quadsToMesh
+                List.foldl (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks3 |> quadsToMesh
 
             else
                 model.brickMesh
@@ -1275,6 +1310,7 @@ entities model =
                         , WebGL.entityWith
                             [ DepthTest.default
                             , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
+                            , blend
                             ]
                             brickVertexShader
                             brickFragmentShader
@@ -1282,6 +1318,7 @@ entities model =
                             { perspective = xrView.projectionMatrix
                             , viewMatrix = xrView.viewMatrix
                             , modelTransform = Mat4.identity
+                            , elapsedTime = Duration.from model.startTime time |> Duration.inMilliseconds
                             }
                         ]
                             ++ (case model.lastUsedInput of
@@ -1354,14 +1391,20 @@ drawPreviewBrick viewPosition xrView matrix model =
         ]
         brickVertexShader
         brickFragmentShader
-        (pointToBrick (mat4ToPoint3d matrix) model.brickSize (Vec4.vec4 0.2 0.2 1 0.3) model.bricks
-            |> brickMesh
+        (pointToBrick
+            (Time.millisToPosix 0)
+            (mat4ToPoint3d matrix)
+            model.brickSize
+            (Vec4.vec4 0.2 0.2 1 0.3)
+            model.bricks
+            |> brickMesh (Time.millisToPosix 0)
             |> quadsToMesh
         )
         { perspective = xrView.projectionMatrix
         , viewMatrix = xrView.viewMatrix
         , modelTransform = Mat4.identity
         , cameraPosition = viewPosition
+        , elapsedTime = 1000
         }
 
 
@@ -1484,17 +1527,19 @@ type alias BrickVarying =
     { vColor : Vec4, vPosition : Vec3, vUvCoord : Vec2, vSize : Vec2 }
 
 
-brickVertexShader : Shader BrickVertex { a | perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 } BrickVarying
+brickVertexShader : Shader BrickVertex { a | elapsedTime : Float, perspective : Mat4, viewMatrix : Mat4, modelTransform : Mat4 } BrickVarying
 brickVertexShader =
     [glsl|
 attribute vec3 position;
 attribute vec4 color;
 attribute vec2 uvCoord;
 attribute vec2 size;
+attribute float placedAt;
 
 uniform mat4 modelTransform;
 uniform mat4 viewMatrix;
 uniform mat4 perspective;
+uniform float elapsedTime;
 
 varying vec4 vColor;
 varying vec3 vPosition;
@@ -1502,8 +1547,9 @@ varying vec2 vUvCoord;
 varying vec2 vSize;
 
 void main(void) {
-    gl_Position = perspective * viewMatrix * modelTransform * vec4(position, 1.0);
-    vColor = color;
+    float t = clamp((elapsedTime - placedAt) / 100.0, 0.0, 1.0);
+    gl_Position = perspective * viewMatrix * modelTransform * vec4(position.xy, position.z + (1.0 - t) / 20.0, 1.0);
+    vColor = vec4(color.rgb, color.a * t);
     vPosition = (modelTransform * vec4(position, 1.0)).xyz;
     vUvCoord = uvCoord;
     vSize = size;

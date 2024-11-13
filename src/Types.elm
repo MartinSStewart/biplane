@@ -56,7 +56,7 @@ type alias Input2 =
 
 
 type alias Brick =
-    { min : Coord GridUnit, max : Coord GridUnit, z : Int, color : Vec4 }
+    { min : Coord GridUnit, max : Coord GridUnit, z : Int, color : Vec4, placedAt : Time.Posix }
 
 
 type GridUnit
@@ -101,6 +101,7 @@ type alias BrickVertex =
     , color : Vec4
     , uvCoord : Vec2
     , size : Vec2
+    , placedAt : Float
     }
 
 
