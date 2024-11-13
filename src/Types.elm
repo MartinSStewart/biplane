@@ -40,6 +40,7 @@ type alias FrontendModel =
     , consoleLog : String
     , consoleLogMesh : Effect.WebGL.Mesh LabelVertex
     , lastPlacedBrick : Maybe Brick
+    , undoHeld : Maybe Time.Posix
     }
 
 

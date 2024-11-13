@@ -325,6 +325,7 @@ init url key =
       , consoleLog = ""
       , consoleLogMesh = WebGL.indexedTriangles [] []
       , lastPlacedBrick = Nothing
+      , undoHeld = Nothing
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -775,7 +776,7 @@ placeAdjacentBricksHelper time stepCount newBricks existingBricks existingBricks
 
                     placedAt : Time.Posix
                     placedAt =
-                        Duration.addTo time (Duration.milliseconds (toFloat stepCount * 5))
+                        Duration.addTo time (Duration.milliseconds (toFloat stepCount * 20))
                 in
                 case findOpenSpots brickMin brickMax newBricks existingBricks existingBricksBelow of
                     head2 :: _ ->
@@ -934,12 +935,20 @@ vrUpdate pose model =
             )
                 ++ model.bricks
 
-        ( meshChanged2, bricks3 ) =
-            if leftInput.aButton && not model.previousLeftInput.aButton then
-                ( True, List.drop 1 bricks2 )
+        ( pressedUndoAt, bricks3 ) =
+            case ( leftInput.aButton && not model.previousLeftInput.aButton, model.undoHeld ) of
+                ( True, _ ) ->
+                    ( Just pose.time, List.drop 1 bricks2 )
 
-            else
-                ( False, bricks2 )
+                ( _, Just heldAt ) ->
+                    if Duration.from heldAt pose.time |> Quantity.lessThan (Duration.seconds 0.5) then
+                        ( Nothing, bricks2 )
+
+                    else
+                        ( Just (Duration.addTo pose.time (Duration.seconds -0.35)), List.drop 1 bricks2 )
+
+                _ ->
+                    ( Nothing, bricks2 )
 
         brickSizeX : Int
         brickSizeX =
@@ -979,8 +988,8 @@ vrUpdate pose model =
                 brickSize2
       , bricks = bricks3
       , brickMesh =
-            if maybeBrick /= PlaceNone || meshChanged2 then
-                List.foldl (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks3 |> quadsToMesh
+            if maybeBrick /= PlaceNone || pressedUndoAt /= Nothing then
+                List.foldr (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks3 |> quadsToMesh
 
             else
                 model.brickMesh
@@ -1045,6 +1054,17 @@ vrUpdate pose model =
 
                         _ ->
                             model.lastPlacedBrick
+      , undoHeld =
+            case pressedUndoAt of
+                Just pressedAt ->
+                    Just pressedAt
+
+                Nothing ->
+                    if leftInput.aButton then
+                        model.undoHeld
+
+                    else
+                        Nothing
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
@@ -1066,12 +1086,18 @@ vrUpdate pose model =
             Command.none
         , case maybeBrick of
             PlaceSingle _ ->
-                Ports.playSound "pop"
+                Ports.playSound "resize-brick"
 
             PlaceMany many ->
-                Ports.repeatSound "pop" (List.Nonempty.length many)
+                Ports.repeatSound "resize-brick" (List.Nonempty.length many)
 
             PlaceNone ->
+                Command.none
+        , case pressedUndoAt of
+            Just _ ->
+                Ports.playSound "undo"
+
+            Nothing ->
                 Command.none
         ]
     )
@@ -1547,7 +1573,7 @@ varying vec2 vSize;
 
 void main(void) {
     float t = clamp((elapsedTime - placedAt) / 100.0, 0.0, 1.0);
-    gl_Position = perspective * viewMatrix * modelTransform * vec4(position.xy, position.z + (1.0 - t) / 20.0, 1.0);
+    gl_Position = perspective * viewMatrix * modelTransform * vec4(position.xy, position.z + (1.0 - t) / 15.0, 1.0);
     vColor = vec4(color.rgb, color.a * t);
     vPosition = (modelTransform * vec4(position, 1.0)).xyz;
     vUvCoord = uvCoord;

@@ -23,6 +23,10 @@ exports.init = async function(app) {
     app.ports.load_sounds_to_js.subscribe((a) => {
         context = new AudioContext();
         loadAudio("pop", context, sounds);
+        loadAudio("brick-placed", context, sounds);
+        loadAudio("undo", context, sounds);
+        loadAudio("redo", context, sounds);
+        loadAudio("resize-brick", context, sounds);
         app.ports.load_sounds_from_js.send(null);
     });
     app.ports.play_sound.subscribe((a) => {
@@ -36,10 +40,10 @@ exports.init = async function(app) {
     app.ports.repeat_sound.subscribe((a) => {
         if (sounds[a.name]) {
             for (let i = 0; i < a.count; i++) {
-                const source = context.createBufferSource();
+                let source = context.createBufferSource();
                 source.buffer = sounds[a.name];
                 source.connect(context.destination);
-                source.start((Math.random() * 10 + i * 10) / 1000);
+                source.start(context.currentTime + (Math.random() * 20 + i * 20) / 1000);
             }
         }
     });
