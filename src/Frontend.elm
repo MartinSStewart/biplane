@@ -31,6 +31,7 @@ import Json.Decode
 import Lamdera
 import Length exposing (Meters)
 import List.Extra
+import List.Nonempty exposing (Nonempty)
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
@@ -41,6 +42,7 @@ import Point3d exposing (Point3d)
 import Ports
 import Quantity exposing (Product, Quantity(..), Rate)
 import Round
+import SeqSet exposing (SeqSet)
 import Set
 import TriangularMesh
 import Types exposing (..)
@@ -525,7 +527,7 @@ textMesh position text =
                         Just glyph ->
                             let
                                 scaleAdjust =
-                                    0.002
+                                    0.001
 
                                 x0 =
                                     toFloat (glyph.xOffset + xOffset) * scaleAdjust + pos.x
@@ -700,11 +702,97 @@ inputToButtons input =
             noInput
 
 
-placeBrick : Input2 -> Bool -> Bool -> FrontendModel -> Maybe Brick
-placeBrick leftInput pressedLeftTrigger leftTriggerHeld model =
-    case ( leftInput.matrix, pressedLeftTrigger, leftTriggerHeld ) of
+type PlaceBrick
+    = PlaceSingle Brick
+    | PlaceNone
+    | PlaceMany (Nonempty Brick)
+
+
+placeAdjacentBricks : Brick -> List Brick -> Nonempty Brick
+placeAdjacentBricks placedBrick existingBricks =
+    placeAdjacentBricksHelper
+        0
+        (List.Nonempty.singleton placedBrick)
+        (List.filter (\brick2 -> brick2.z - placedBrick.z == 0 || brick2.z - placedBrick.z == -1) existingBricks)
+        SeqSet.empty
+        |> List.Nonempty.reverse
+
+
+placeAdjacentBricksHelper : Int -> Nonempty Brick -> List Brick -> SeqSet (Coord GridUnit) -> Nonempty Brick
+placeAdjacentBricksHelper stepCount newBricks existingBricks openSpots =
+    if stepCount > 100 then
+        newBricks
+
+    else
+        let
+            brick : Brick
+            brick =
+                List.Nonempty.head newBricks
+
+            openSpots2 : SeqSet (Coord GridUnit)
+            openSpots2 =
+                List.concatMap
+                    (\x -> [ Coord.xy x (Coord.y brick.min - 1), Coord.xy x (Coord.y brick.max) ])
+                    (List.range (Coord.x brick.min) (Coord.x brick.max - 1))
+                    ++ List.concatMap
+                        (\y -> [ Coord.xy (Coord.x brick.min - 1) y, Coord.xy (Coord.x brick.max) y ])
+                        (List.range (Coord.y brick.min) (Coord.y brick.max - 1))
+                    |> List.filter
+                        (\coord ->
+                            not (List.any (brickAtPoint coord brick.z) existingBricks)
+                                && not (List.Nonempty.any (brickAtPoint coord brick.z) newBricks)
+                                && List.any (brickAtPoint coord (brick.z - 1)) existingBricks
+                        )
+                    |> SeqSet.fromList
+                    |> SeqSet.union openSpots
+        in
+        case SeqSet.toList openSpots2 of
+            head :: rest ->
+                placeAdjacentBricksHelper
+                    (stepCount + 1)
+                    (List.Nonempty.cons
+                        { min = head, max = Coord.plus (Coord.xy 1 1) head, z = brick.z, color = green }
+                        newBricks
+                    )
+                    existingBricks
+                    (SeqSet.fromList rest)
+
+            [] ->
+                newBricks
+
+
+green =
+    Vec4.vec4 0 1 0 1
+
+
+brickAtPoint : Coord GridUnit -> Int -> Brick -> Bool
+brickAtPoint point z brick =
+    let
+        ( Quantity ax0, Quantity ay0 ) =
+            point
+
+        ( Quantity bx0, Quantity by0 ) =
+            brick.min
+
+        ( Quantity bx1, Quantity by1 ) =
+            brick.max
+    in
+    (bx0 - ax0 <= 0 && ax0 - bx1 < 0) && (by0 - ay0 <= 0 && ay0 - by1 < 0) && (z - brick.z == 0)
+
+
+placeBrick : Input2 -> Bool -> Bool -> FrontendModel -> PlaceBrick
+placeBrick input pressedTrigger triggerHeld model =
+    case ( input.matrix, pressedTrigger, triggerHeld ) of
         ( Just matrix, True, _ ) ->
-            pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks |> Just
+            let
+                brick =
+                    pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
+            in
+            if input.sideTrigger > 0.5 then
+                placeAdjacentBricks brick model.bricks |> PlaceMany
+
+            else
+                PlaceSingle brick
 
         ( Just matrix, False, True ) ->
             case model.lastPlacedBrick of
@@ -714,16 +802,16 @@ placeBrick leftInput pressedLeftTrigger leftTriggerHeld model =
                             pointToBrick (mat4ToPoint3d matrix) model.brickSize red model.bricks
                     in
                     if brickOverlap lastPlacedBrick brick then
-                        Nothing
+                        PlaceNone
 
                     else
-                        Just brick
+                        PlaceSingle brick
 
                 Nothing ->
-                    Nothing
+                    PlaceNone
 
         _ ->
-            Nothing
+            PlaceNone
 
 
 vrUpdate : WebGL.XrPose -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -750,7 +838,7 @@ vrUpdate pose model =
         pressedRightTrigger =
             rightTriggerHeld && model.previousRightInput.trigger <= 0.5
 
-        maybeBrick : Maybe Brick
+        maybeBrick : PlaceBrick
         maybeBrick =
             case model.lastUsedInput of
                 WebGL.LeftHand ->
@@ -760,11 +848,21 @@ vrUpdate pose model =
                     placeBrick rightInput pressedRightTrigger rightTriggerHeld model
 
                 WebGL.Unknown ->
-                    Nothing
+                    PlaceNone
 
         bricks2 : List Brick
         bricks2 =
-            Maybe.Extra.toList maybeBrick ++ model.bricks
+            (case maybeBrick of
+                PlaceSingle brick ->
+                    [ brick ]
+
+                PlaceMany many ->
+                    List.Nonempty.toList many
+
+                PlaceNone ->
+                    []
+            )
+                ++ model.bricks
 
         ( meshChanged2, bricks3 ) =
             if leftInput.aButton && not model.previousLeftInput.aButton then
@@ -811,7 +909,7 @@ vrUpdate pose model =
                 brickSize2
       , bricks = bricks3
       , brickMesh =
-            if maybeBrick /= Nothing || meshChanged2 then
+            if maybeBrick /= PlaceNone || meshChanged2 then
                 List.foldl (\brick mesh -> brickMesh brick ++ mesh) [] bricks3 |> quadsToMesh
 
             else
@@ -858,10 +956,13 @@ vrUpdate pose model =
       , consoleLogMesh = model.consoleLogMesh
       , lastPlacedBrick =
             case maybeBrick of
-                Just brick ->
+                PlaceSingle brick ->
                     Just brick
 
-                Nothing ->
+                PlaceMany many ->
+                    Just (List.Nonempty.head many)
+
+                PlaceNone ->
                     case ( model.lastUsedInput, leftTriggerHeld, rightTriggerHeld ) of
                         ( WebGL.LeftHand, False, _ ) ->
                             Nothing
@@ -894,10 +995,13 @@ vrUpdate pose model =
           else
             Command.none
         , case maybeBrick of
-            Just _ ->
+            PlaceSingle _ ->
                 Ports.playSound "pop"
 
-            Nothing ->
+            PlaceMany many ->
+                Ports.playSound "pop"
+
+            PlaceNone ->
                 Command.none
         ]
     )
