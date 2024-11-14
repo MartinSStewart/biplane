@@ -10,7 +10,6 @@ import Bytes.Encode
 import Camera3d
 import Coord exposing (Coord)
 import Dict
-import Direction2d
 import Direction3d exposing (Direction3d)
 import Duration exposing (Duration, Seconds)
 import Effect.Browser.Dom
@@ -41,21 +40,16 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Math.Vector4 as Vec4 exposing (Vec4)
-import Maybe.Extra
 import Pixels exposing (Pixels)
 import Point2d
 import Point3d exposing (Point3d)
 import Ports
 import Quantity exposing (Product, Quantity(..), Rate)
-import Round
 import SeqSet exposing (SeqSet)
-import Set
-import SketchPlane3d
 import TriangularMesh
 import Types exposing (..)
 import Unsafe
 import Url
-import Vector2d
 import Vector3d exposing (Vector3d)
 import WebGL.Matrices
 import WebGL.Settings.Blend as Blend
@@ -336,48 +330,39 @@ update msg model =
                     case model.isInVr of
                         IsInNormalMode normalMode ->
                             let
-                                maybeDirection =
-                                    Vector2d.sum
+                                v =
+                                    Vector3d.sum
                                         [ if SeqSet.member "w" normalMode.keysDown then
-                                            Vector2d.meters 0 1
+                                            Vector3d.meters 1 0 0
 
                                           else
-                                            Vector2d.zero
+                                            Vector3d.zero
                                         , if SeqSet.member "s" normalMode.keysDown then
-                                            Vector2d.meters 0 -1
+                                            Vector3d.meters -1 0 0
 
                                           else
-                                            Vector2d.zero
+                                            Vector3d.zero
                                         , if SeqSet.member "a" normalMode.keysDown then
-                                            Vector2d.meters -1 0
+                                            Vector3d.meters 0 1 0
 
                                           else
-                                            Vector2d.zero
+                                            Vector3d.zero
                                         , if SeqSet.member "d" normalMode.keysDown then
-                                            Vector2d.meters 1 0
+                                            Vector3d.meters 0 -1 0
 
                                           else
-                                            Vector2d.zero
+                                            Vector3d.zero
                                         ]
-                                        |> Vector2d.direction
+                                        |> Vector3d.normalize
+                                        |> Vector3d.unwrap
+                                        |> Vector3d.unsafe
+                                        |> Vector3d.scaleBy 0.1
                             in
                             { normalMode
                                 | position =
-                                    case maybeDirection of
-                                        Just direction ->
-                                            Point3d.translateIn
-                                                (Direction3d.rotateAround
-                                                    Axis3d.z
-                                                    (Direction2d.rotateBy normalMode.longitude direction
-                                                        |> Direction2d.angleFrom Direction2d.y
-                                                    )
-                                                    Direction3d.x
-                                                )
-                                                (Length.centimeters 10)
-                                                normalMode.position
-
-                                        Nothing ->
-                                            normalMode.position
+                                    Point3d.translateBy
+                                        (Vector3d.rotateAround Axis3d.z normalMode.longitude v)
+                                        normalMode.position
                             }
                                 |> IsInNormalMode
 
@@ -562,6 +547,9 @@ update msg model =
                             { normalMode
                                 | longitude =
                                     Angle.degrees (-x / 8) |> Quantity.plus normalMode.longitude
+                                , latitude =
+                                    Quantity.plus (Angle.degrees (y / 8)) normalMode.latitude
+                                        |> Quantity.clamp (Angle.degrees -89) (Angle.degrees 89)
                             }
                                 |> IsInNormalMode
 
@@ -1427,10 +1415,8 @@ normalModeView normalMode model =
                 { eyePoint = normalMode.position
                 , focalPoint =
                     Point3d.translateIn
-                        (Direction3d.fromAzimuthInAndElevationFrom
-                            SketchPlane3d.xy
-                            normalMode.longitude
-                            normalMode.latitude
+                        (Direction3d.rotateAround Axis3d.y normalMode.latitude Direction3d.x
+                            |> Direction3d.rotateAround Axis3d.z normalMode.longitude
                         )
                         Length.meter
                         normalMode.position
@@ -1445,7 +1431,7 @@ normalModeView normalMode model =
                 camera
                 { nearClipDepth = Length.centimeters 10
                 , farClipDepth = Length.kilometer
-                , aspectRatio = 1
+                , aspectRatio = toFloat windowWidth / toFloat windowHeight
                 }
 
         viewMatrix : Mat4
