@@ -1,7 +1,9 @@
 module Types exposing (..)
 
+import Angle exposing (Angle)
 import Browser exposing (UrlRequest)
 import Coord exposing (Coord)
+import Direction2d exposing (Direction2d)
 import Direction3d exposing (Direction3d)
 import Duration exposing (Seconds)
 import Effect.Browser.Navigation
@@ -55,7 +57,8 @@ type IsInVr
 
 type alias NormalMode =
     { position : Point3d Meters World
-    , direction : Direction3d World
+    , longitude : Angle
+    , latitude : Angle
     , windowSize : Coord Pixels
     , cssWindowSize : Coord CssPixels
     , cssCanvasSize : Coord CssPixels
@@ -158,6 +161,8 @@ type FrontendMsg
     | PressedEnterNormal
     | WindowResized (Coord CssPixels)
     | GotDevicePixelRatio Float
+    | MouseMoved Float Float
+    | MouseDown
 
 
 type ToBackend

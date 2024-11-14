@@ -50,6 +50,7 @@ import Quantity exposing (Product, Quantity(..), Rate)
 import Round
 import SeqSet exposing (SeqSet)
 import Set
+import SketchPlane3d
 import TriangularMesh
 import Types exposing (..)
 import Unsafe
@@ -83,6 +84,8 @@ app =
                                 , Effect.Browser.Events.onKeyDown (keyDecoder KeyDown)
                                 , Effect.Browser.Events.onKeyUp (keyDecoder KeyUp)
                                 , Effect.Browser.Events.onAnimationFrame AnimationFrame
+                                , Effect.Browser.Events.onMouseMove (mouseDecoder MouseMoved)
+                                , Effect.Browser.Events.onMouseDown (mouseDecoder (\_ _ -> MouseDown))
                                 ]
 
                         IsInVr ->
@@ -99,6 +102,14 @@ keyDecoder : (String -> msg) -> Json.Decode.Decoder msg
 keyDecoder msg =
     Json.Decode.field "key" Json.Decode.string
         |> Json.Decode.map msg
+
+
+mouseDecoder : (Float -> Float -> msg) -> Json.Decode.Decoder msg
+mouseDecoder msg =
+    Json.Decode.map2
+        msg
+        (Json.Decode.field "movementX" Json.Decode.float)
+        (Json.Decode.field "movementY" Json.Decode.float)
 
 
 gridUnitSize : Vector3d Meters World
@@ -357,8 +368,10 @@ update msg model =
                                             Point3d.translateIn
                                                 (Direction3d.rotateAround
                                                     Axis3d.z
-                                                    (Direction2d.angleFrom Direction2d.y direction)
-                                                    normalMode.direction
+                                                    (Direction2d.rotateBy normalMode.longitude direction
+                                                        |> Direction2d.angleFrom Direction2d.y
+                                                    )
+                                                    Direction3d.x
                                                 )
                                                 (Length.centimeters 10)
                                                 normalMode.position
@@ -499,8 +512,9 @@ update msg model =
             ( { model
                 | isInVr =
                     IsInNormalMode
-                        { position = Point3d.origin
-                        , direction = Direction3d.x
+                        { position = Point3d.meters 0 0 2
+                        , longitude = Quantity.zero
+                        , latitude = Quantity.zero
                         , devicePixelRatio = 1
                         , windowSize = Coord.xy 100 100
                         , cssWindowSize = Coord.xy 100 100
@@ -508,9 +522,12 @@ update msg model =
                         , keysDown = SeqSet.empty
                         }
               }
-            , Task.perform
-                (\{ viewport } -> WindowResized (Coord.xy (round viewport.width) (round viewport.height)))
-                Effect.Browser.Dom.getViewport
+            , Command.batch
+                [ Task.perform
+                    (\{ viewport } -> WindowResized (Coord.xy (round viewport.width) (round viewport.height)))
+                    Effect.Browser.Dom.getViewport
+                , Ports.requestPointerLock
+                ]
             )
 
         WindowResized windowSize ->
@@ -536,6 +553,33 @@ update msg model =
 
                 _ ->
                     ( model, Command.none )
+
+        MouseMoved x y ->
+            ( { model
+                | isInVr =
+                    case model.isInVr of
+                        IsInNormalMode normalMode ->
+                            { normalMode
+                                | longitude =
+                                    Angle.degrees (-x / 8) |> Quantity.plus normalMode.longitude
+                            }
+                                |> IsInNormalMode
+
+                        _ ->
+                            model.isInVr
+              }
+            , Command.none
+            )
+
+        MouseDown ->
+            ( model
+            , case model.isInVr of
+                IsInNormalMode _ ->
+                    Ports.requestPointerLock
+
+                _ ->
+                    Command.none
+            )
 
 
 windowResizedUpdate :
@@ -1383,7 +1427,11 @@ normalModeView normalMode model =
                 { eyePoint = normalMode.position
                 , focalPoint =
                     Point3d.translateIn
-                        normalMode.direction
+                        (Direction3d.fromAzimuthInAndElevationFrom
+                            SketchPlane3d.xy
+                            normalMode.longitude
+                            normalMode.latitude
+                        )
                         Length.meter
                         normalMode.position
                 , projection = Camera3d.Perspective
@@ -1396,7 +1444,7 @@ normalModeView normalMode model =
             WebGL.Matrices.projectionMatrix
                 camera
                 { nearClipDepth = Length.centimeters 10
-                , farClipDepth = Length.meters 100
+                , farClipDepth = Length.kilometer
                 , aspectRatio = 1
                 }
 
@@ -1421,6 +1469,15 @@ normalModeView normalMode model =
             vertexShader
             fragmentShader
             sphere2
+            { perspective = perspective
+            , viewMatrix = viewMatrix
+            , modelTransform = Mat4.identity
+            , cameraPosition = Point3d.toVec3 normalMode.position
+            }
+        , WebGL.entity
+            vertexShader
+            fragmentShader
+            square2
             { perspective = perspective
             , viewMatrix = viewMatrix
             , modelTransform = Mat4.identity
@@ -1604,6 +1661,16 @@ square =
     , { position = Vec3.vec3 2 2 0, texCoord = Vec2.vec2 1 0 }
     , { position = Vec3.vec3 0 2 0, texCoord = Vec2.vec2 1 1 }
     , { position = Vec3.vec3 0 0 0, texCoord = Vec2.vec2 0 1 }
+    ]
+        |> quadsToMesh
+
+
+square2 : Mesh Vertex
+square2 =
+    [ { position = Vec3.vec3 100 0 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
+    , { position = Vec3.vec3 100 100 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
+    , { position = Vec3.vec3 0 100 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
+    , { position = Vec3.vec3 0 0 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
     ]
         |> quadsToMesh
 

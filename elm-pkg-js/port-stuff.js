@@ -48,7 +48,7 @@ exports.init = async function(app) {
         }
     });
 
-    app.ports.martinsstewart_elm_device_pixel_ratio_to_js.subscribe(a => app.ports.martinsstewart_elm_device_pixel_ratio_from_js.send(window.devicePixelRatio));
+    app.ports.request_pointer_lock_to_js.subscribe(a => document.body.requestPointerLock());
 
-    app.ports.user_agent_to_js.subscribe(a => app.ports.user_agent_from_js.send(navigator.platform));
+    app.ports.martinsstewart_elm_device_pixel_ratio_to_js.subscribe(a => app.ports.martinsstewart_elm_device_pixel_ratio_from_js.send(window.devicePixelRatio));
 }
