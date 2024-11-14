@@ -2,6 +2,7 @@ module Types exposing (..)
 
 import Browser exposing (UrlRequest)
 import Coord exposing (Coord)
+import Direction3d exposing (Direction3d)
 import Duration exposing (Seconds)
 import Effect.Browser.Navigation
 import Effect.Time as Time
@@ -12,9 +13,11 @@ import Math.Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
 import Math.Vector4 exposing (Vec4)
+import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Rate, Unitless)
+import SeqSet exposing (SeqSet)
 import Url exposing (Url)
 import Vector3d exposing (Vector3d)
 
@@ -23,7 +26,7 @@ type alias FrontendModel =
     { key : Effect.Browser.Navigation.Key
     , time : Time.Posix
     , lastVrUpdate : Time.Posix
-    , isInVr : Bool
+    , isInVr : IsInVr
     , boundaryMesh : Effect.WebGL.Mesh Vertex
     , previousBoundary : Maybe (List Vec2)
     , startTime : Time.Posix
@@ -42,6 +45,27 @@ type alias FrontendModel =
     , lastPlacedBrick : Maybe Brick
     , undoHeld : Maybe Time.Posix
     }
+
+
+type IsInVr
+    = IsInNormalMode NormalMode
+    | IsInVr
+    | IsInMenu
+
+
+type alias NormalMode =
+    { position : Point3d Meters World
+    , direction : Direction3d World
+    , windowSize : Coord Pixels
+    , cssWindowSize : Coord CssPixels
+    , cssCanvasSize : Coord CssPixels
+    , devicePixelRatio : Float
+    , keysDown : SeqSet String
+    }
+
+
+type CssPixels
+    = CssPixel Never
 
 
 type alias Input2 =
@@ -124,12 +148,16 @@ type FrontendMsg
     | StartedXr (Result Effect.WebGL.XrStartError Effect.WebGL.XrStartData)
     | RenderedXrFrame (Result Effect.WebGL.XrRenderError Effect.WebGL.XrPose)
     | KeyDown String
+    | KeyUp String
     | EndedXrSession
     | TriggeredEndXrSession
     | GotStartTime Time.Posix
     | GotFontTexture (Result Effect.WebGL.Texture.Error Texture)
     | SoundsLoaded
     | GotConsoleLog String
+    | PressedEnterNormal
+    | WindowResized (Coord CssPixels)
+    | GotDevicePixelRatio Float
 
 
 type ToBackend

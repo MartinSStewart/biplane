@@ -1,4 +1,4 @@
-port module Ports exposing (gotConsoleLog, loadSounds, playSound, repeatSound, soundsLoaded)
+port module Ports exposing (getDevicePixelRatio, gotConsoleLog, gotDevicePixelRatio, loadSounds, playSound, repeatSound, soundsLoaded)
 
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -19,6 +19,29 @@ port repeat_sound : Json.Encode.Value -> Cmd msg
 
 
 port console_log_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port martinsstewart_elm_device_pixel_ratio_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port martinsstewart_elm_device_pixel_ratio_to_js : Json.Encode.Value -> Cmd msg
+
+
+getDevicePixelRatio : Command FrontendOnly toMsg msg
+getDevicePixelRatio =
+    Command.sendToJs "martinsstewart_elm_device_pixel_ratio_to_js" martinsstewart_elm_device_pixel_ratio_to_js Json.Encode.null
+
+
+gotDevicePixelRatio : (Float -> msg) -> Subscription.Subscription FrontendOnly msg
+gotDevicePixelRatio msg =
+    Subscription.fromJs
+        "martinsstewart_elm_device_pixel_ratio_from_js"
+        martinsstewart_elm_device_pixel_ratio_from_js
+        (\value ->
+            Json.Decode.decodeValue Json.Decode.float value
+                |> Result.withDefault 1
+                |> msg
+        )
 
 
 gotConsoleLog : (String -> msg) -> Subscription FrontendOnly msg

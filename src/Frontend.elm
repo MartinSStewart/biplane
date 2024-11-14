@@ -1,14 +1,19 @@
 module Frontend exposing (app)
 
+import Angle
 import Array exposing (Array)
 import Array2D
+import Axis3d
 import BayerMatrix
 import Browser exposing (UrlRequest(..))
 import Bytes.Encode
+import Camera3d
 import Coord exposing (Coord)
 import Dict
+import Direction2d
 import Direction3d exposing (Direction3d)
 import Duration exposing (Duration, Seconds)
+import Effect.Browser.Dom
 import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -37,6 +42,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Math.Vector4 as Vec4 exposing (Vec4)
 import Maybe.Extra
+import Pixels exposing (Pixels)
 import Point2d
 import Point3d exposing (Point3d)
 import Ports
@@ -48,7 +54,9 @@ import TriangularMesh
 import Types exposing (..)
 import Unsafe
 import Url
+import Vector2d
 import Vector3d exposing (Vector3d)
+import WebGL.Matrices
 import WebGL.Settings.Blend as Blend
 import WebGL.Settings.DepthTest as DepthTest
 
@@ -64,17 +72,33 @@ app =
         , subscriptions =
             \model ->
                 Subscription.batch
-                    [ if model.isInVr then
-                        Subscription.none
+                    [ case model.isInVr of
+                        IsInMenu ->
+                            Subscription.none
 
-                      else
-                        Effect.Browser.Events.onAnimationFrame AnimationFrame
+                        IsInNormalMode _ ->
+                            Subscription.batch
+                                [ Ports.gotDevicePixelRatio GotDevicePixelRatio
+                                , Effect.Browser.Events.onResize (\width height -> WindowResized (Coord.xy width height))
+                                , Effect.Browser.Events.onKeyDown (keyDecoder KeyDown)
+                                , Effect.Browser.Events.onKeyUp (keyDecoder KeyUp)
+                                , Effect.Browser.Events.onAnimationFrame AnimationFrame
+                                ]
+
+                        IsInVr ->
+                            Effect.Browser.Events.onAnimationFrame AnimationFrame
                     , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
                     , Ports.soundsLoaded SoundsLoaded
                     , Ports.gotConsoleLog GotConsoleLog
                     ]
         , view = view
         }
+
+
+keyDecoder : (String -> msg) -> Json.Decode.Decoder msg
+keyDecoder msg =
+    Json.Decode.field "key" Json.Decode.string
+        |> Json.Decode.map msg
 
 
 gridUnitSize : Vector3d Meters World
@@ -85,95 +109,6 @@ gridUnitSize =
 gridZRatio : Float
 gridZRatio =
     Quantity.ratio (Vector3d.zComponent gridUnitSize) (Vector3d.xComponent gridUnitSize)
-
-
-cube : Point3d u c -> Vector3d u c -> Vec4 -> List Vertex
-cube position size color =
-    let
-        p =
-            Point3d.unwrap position
-
-        s =
-            Vector3d.unwrap size
-
-        v000 =
-            Vec3.vec3 p.x p.y p.z
-
-        v100 =
-            Vec3.vec3 (p.x + s.x) p.y p.z
-
-        v010 =
-            Vec3.vec3 p.x (p.y + s.y) p.z
-
-        v110 =
-            Vec3.vec3 (p.x + s.x) (p.y + s.y) p.z
-
-        v001 =
-            Vec3.vec3 p.x p.y (p.z + s.z)
-
-        v101 =
-            Vec3.vec3 (p.x + s.x) p.y (p.z + s.z)
-
-        v011 =
-            Vec3.vec3 p.x (p.y + s.y) (p.z + s.z)
-
-        v111 =
-            Vec3.vec3 (p.x + s.x) (p.y + s.y) (p.z + s.z)
-
-        up =
-            Vec3.vec3 0 0 1
-
-        down =
-            Vec3.vec3 0 0 -1
-
-        front =
-            Vec3.vec3 0 1 0
-
-        back =
-            Vec3.vec3 0 -1 0
-
-        right =
-            Vec3.vec3 1 0 0
-
-        left =
-            Vec3.vec3 -1 0 0
-    in
-    [ -- down
-      { position = v000, color = color, normal = down, shininess = 1 }
-    , { position = v100, color = color, normal = down, shininess = 1 }
-    , { position = v110, color = color, normal = down, shininess = 1 }
-    , { position = v010, color = color, normal = down, shininess = 1 }
-
-    -- up
-    , { position = v001, color = color, normal = up, shininess = 1 }
-    , { position = v011, color = color, normal = up, shininess = 1 }
-    , { position = v111, color = color, normal = up, shininess = 1 }
-    , { position = v101, color = color, normal = up, shininess = 1 }
-
-    -- left
-    , { position = v000, color = color, normal = left, shininess = 1 }
-    , { position = v010, color = color, normal = left, shininess = 1 }
-    , { position = v011, color = color, normal = left, shininess = 1 }
-    , { position = v001, color = color, normal = left, shininess = 1 }
-
-    -- right
-    , { position = v100, color = color, normal = right, shininess = 1 }
-    , { position = v101, color = color, normal = right, shininess = 1 }
-    , { position = v111, color = color, normal = right, shininess = 1 }
-    , { position = v110, color = color, normal = right, shininess = 1 }
-
-    -- front
-    , { position = v010, color = color, normal = front, shininess = 1 }
-    , { position = v110, color = color, normal = front, shininess = 1 }
-    , { position = v111, color = color, normal = front, shininess = 1 }
-    , { position = v011, color = color, normal = front, shininess = 1 }
-
-    -- back
-    , { position = v000, color = color, normal = back, shininess = 1 }
-    , { position = v001, color = color, normal = back, shininess = 1 }
-    , { position = v101, color = color, normal = back, shininess = 1 }
-    , { position = v100, color = color, normal = back, shininess = 1 }
-    ]
 
 
 brickMesh : Time.Posix -> Brick -> List BrickVertex
@@ -242,24 +177,6 @@ brickMesh startTime brick =
 
         v111 =
             Vec3.vec3 (px + sx) (py + sy) (pz + sz)
-
-        up =
-            Vec3.vec3 0 0 1
-
-        down =
-            Vec3.vec3 0 0 -1
-
-        front =
-            Vec3.vec3 0 1 0
-
-        back =
-            Vec3.vec3 0 -1 0
-
-        right =
-            Vec3.vec3 1 0 0
-
-        left =
-            Vec3.vec3 -1 0 0
     in
     [ -- down
       { position = v000, color = color, uvCoord = Vec2.vec2 0 0, size = Vec2.vec2 gridSizeX gridSizeY, placedAt = placedAt }
@@ -309,7 +226,7 @@ init url key =
       , time = Time.millisToPosix 0
       , lastVrUpdate = Time.millisToPosix 0
       , startTime = Time.millisToPosix 0
-      , isInVr = False
+      , isInVr = IsInMenu
       , boundaryMesh = WebGL.triangleFan []
       , boundaryCenter = Point2d.origin
       , previousBoundary = Nothing
@@ -402,7 +319,60 @@ update msg model =
             ( model, Command.none )
 
         AnimationFrame time ->
-            ( { model | time = time }, Command.none )
+            ( { model
+                | time = time
+                , isInVr =
+                    case model.isInVr of
+                        IsInNormalMode normalMode ->
+                            let
+                                maybeDirection =
+                                    Vector2d.sum
+                                        [ if SeqSet.member "w" normalMode.keysDown then
+                                            Vector2d.meters 0 1
+
+                                          else
+                                            Vector2d.zero
+                                        , if SeqSet.member "s" normalMode.keysDown then
+                                            Vector2d.meters 0 -1
+
+                                          else
+                                            Vector2d.zero
+                                        , if SeqSet.member "a" normalMode.keysDown then
+                                            Vector2d.meters -1 0
+
+                                          else
+                                            Vector2d.zero
+                                        , if SeqSet.member "d" normalMode.keysDown then
+                                            Vector2d.meters 1 0
+
+                                          else
+                                            Vector2d.zero
+                                        ]
+                                        |> Vector2d.direction
+                            in
+                            { normalMode
+                                | position =
+                                    case maybeDirection of
+                                        Just direction ->
+                                            Point3d.translateIn
+                                                (Direction3d.rotateAround
+                                                    Axis3d.z
+                                                    (Direction2d.angleFrom Direction2d.y direction)
+                                                    normalMode.direction
+                                                )
+                                                (Length.centimeters 10)
+                                                normalMode.position
+
+                                        Nothing ->
+                                            normalMode.position
+                            }
+                                |> IsInNormalMode
+
+                        _ ->
+                            model.isInVr
+              }
+            , Command.none
+            )
 
         PressedEnterVr ->
             if model.soundsLoaded then
@@ -420,7 +390,7 @@ update msg model =
             case result of
                 Ok data ->
                     ( { model
-                        | isInVr = True
+                        | isInVr = IsInVr
                         , previousBoundary = data.boundary
                         , boundaryMesh = getBoundaryMesh data.boundary
                         , boundaryCenter =
@@ -443,21 +413,49 @@ update msg model =
                     vrUpdate pose model
 
                 Err XrSessionNotStarted ->
-                    ( { model | isInVr = False }, Command.none )
+                    ( { model | isInVr = IsInMenu }, Command.none )
 
                 Err XrLostTracking ->
                     ( model
                     , WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
                     )
 
-        KeyDown key ->
-            ( model
-            , if key == "Escape" then
-                WebGL.endXrSession |> Task.perform (\() -> EndedXrSession)
+        KeyUp key ->
+            ( case model.isInVr of
+                IsInNormalMode normalMode ->
+                    { model
+                        | isInVr =
+                            IsInNormalMode { normalMode | keysDown = SeqSet.remove key normalMode.keysDown }
+                    }
 
-              else
-                Command.none
+                _ ->
+                    model
+            , Command.none
             )
+
+        KeyDown key ->
+            case model.isInVr of
+                IsInNormalMode normalMode ->
+                    ( { model
+                        | isInVr =
+                            IsInNormalMode { normalMode | keysDown = SeqSet.insert key normalMode.keysDown }
+                      }
+                    , Command.none
+                    )
+
+                IsInVr ->
+                    ( model
+                    , if key == "Escape" then
+                        WebGL.endXrSession |> Task.perform (\() -> EndedXrSession)
+
+                      else
+                        Command.none
+                    )
+
+                IsInMenu ->
+                    ( model
+                    , Command.none
+                    )
 
         EndedXrSession ->
             ( model, Command.none )
@@ -496,6 +494,108 @@ update msg model =
               }
             , Command.none
             )
+
+        PressedEnterNormal ->
+            ( { model
+                | isInVr =
+                    IsInNormalMode
+                        { position = Point3d.origin
+                        , direction = Direction3d.x
+                        , devicePixelRatio = 1
+                        , windowSize = Coord.xy 100 100
+                        , cssWindowSize = Coord.xy 100 100
+                        , cssCanvasSize = Coord.xy 100 100
+                        , keysDown = SeqSet.empty
+                        }
+              }
+            , Task.perform
+                (\{ viewport } -> WindowResized (Coord.xy (round viewport.width) (round viewport.height)))
+                Effect.Browser.Dom.getViewport
+            )
+
+        WindowResized windowSize ->
+            case model.isInVr of
+                IsInNormalMode normalMode ->
+                    let
+                        ( normalMode2, cmd ) =
+                            windowResizedUpdate windowSize normalMode
+                    in
+                    ( { model | isInVr = IsInNormalMode normalMode2 }, cmd )
+
+                _ ->
+                    ( model, Command.none )
+
+        GotDevicePixelRatio devicePixelRatio ->
+            case model.isInVr of
+                IsInNormalMode normalMode ->
+                    let
+                        ( normalMode2, cmd ) =
+                            devicePixelRatioChanged devicePixelRatio normalMode
+                    in
+                    ( { model | isInVr = IsInNormalMode normalMode2 }, cmd )
+
+                _ ->
+                    ( model, Command.none )
+
+
+windowResizedUpdate :
+    Coord CssPixels
+    -> { b | cssWindowSize : Coord CssPixels, windowSize : Coord Pixels, cssCanvasSize : Coord CssPixels, devicePixelRatio : Float }
+    ->
+        ( { b | cssWindowSize : Coord CssPixels, windowSize : Coord Pixels, cssCanvasSize : Coord CssPixels, devicePixelRatio : Float }
+        , Command FrontendOnly ToBackend msg
+        )
+windowResizedUpdate cssWindowSize model =
+    let
+        { cssCanvasSize, windowSize } =
+            findPixelPerfectSize { devicePixelRatio = model.devicePixelRatio, cssWindowSize = cssWindowSize }
+    in
+    ( { model | cssWindowSize = cssWindowSize, cssCanvasSize = cssCanvasSize, windowSize = windowSize }
+    , Ports.getDevicePixelRatio
+    )
+
+
+devicePixelRatioChanged :
+    Float
+    -> { a | cssWindowSize : Coord CssPixels, devicePixelRatio : Float, cssCanvasSize : Coord CssPixels, windowSize : Coord Pixels }
+    -> ( { a | cssWindowSize : Coord CssPixels, devicePixelRatio : Float, cssCanvasSize : Coord CssPixels, windowSize : Coord Pixels }, Command restriction toMsg msg )
+devicePixelRatioChanged devicePixelRatio model =
+    let
+        { cssCanvasSize, windowSize } =
+            findPixelPerfectSize { devicePixelRatio = devicePixelRatio, cssWindowSize = model.cssWindowSize }
+    in
+    ( { model | devicePixelRatio = devicePixelRatio, cssCanvasSize = cssCanvasSize, windowSize = windowSize }
+    , Command.none
+    )
+
+
+findPixelPerfectSize :
+    { devicePixelRatio : Float, cssWindowSize : Coord CssPixels }
+    -> { cssCanvasSize : Coord CssPixels, windowSize : Coord Pixels }
+findPixelPerfectSize frontendModel =
+    let
+        findValue : Quantity Int CssPixels -> ( Int, Int )
+        findValue value =
+            List.range 0 9
+                |> List.map ((+) (Quantity.unwrap value))
+                |> List.Extra.find
+                    (\v ->
+                        let
+                            a =
+                                toFloat v * frontendModel.devicePixelRatio
+                        in
+                        a == toFloat (round a) && modBy 2 (round a) == 0
+                    )
+                |> Maybe.map (\v -> ( v, toFloat v * frontendModel.devicePixelRatio |> round ))
+                |> Maybe.withDefault ( Quantity.unwrap value, toFloat (Quantity.unwrap value) * frontendModel.devicePixelRatio |> round )
+
+        ( w, actualW ) =
+            findValue (Tuple.first frontendModel.cssWindowSize)
+
+        ( h, actualH ) =
+            findValue (Tuple.second frontendModel.cssWindowSize)
+    in
+    { cssCanvasSize = Coord.xy w h, windowSize = Coord.xy actualW actualH }
 
 
 fontTextureWidth =
@@ -1241,22 +1341,92 @@ view model =
     in
     { title = "Brick collab"
     , body =
-        [ if model.isInVr then
-            Html.text "Currently in VR "
+        [ case model.isInVr of
+            IsInVr ->
+                Html.text "Currently in VR "
 
-          else
-            Html.div
-                [ Html.Attributes.style "font-size" "30px", Html.Attributes.style "font-family" "sans-serif" ]
-                [ Html.text "Not in VR "
-                , if model.soundsLoaded then
-                    Html.button [ Html.Events.onClick PressedEnterVr, Html.Attributes.style "font-size" "30px" ] [ Html.text "Enter VR" ]
+            IsInNormalMode normalMode ->
+                normalModeView normalMode model
 
-                  else
-                    Html.text "(Loading...)"
-                , " App started " ++ String.fromInt (round (Duration.inSeconds elapsed)) ++ " seconds ago" |> Html.text
-                ]
+            IsInMenu ->
+                Html.div
+                    [ Html.Attributes.style "font-size" "30px", Html.Attributes.style "font-family" "sans-serif" ]
+                    [ if model.soundsLoaded then
+                        Html.div
+                            []
+                            [ Html.text "Not in VR "
+                            , Html.button
+                                [ Html.Events.onClick PressedEnterVr, Html.Attributes.style "font-size" "30px" ]
+                                [ Html.text "Enter VR game" ]
+                            , Html.div
+                                [ Html.Attributes.style "padding" "20px" ]
+                                [ Html.button
+                                    [ Html.Events.onClick PressedEnterNormal, Html.Attributes.style "font-size" "30px" ]
+                                    [ Html.text "Enter normal game" ]
+                                ]
+                            ]
+
+                      else
+                        Html.text "(Loading...)"
+                    , " App started " ++ String.fromInt (round (Duration.inSeconds elapsed)) ++ " seconds ago" |> Html.text
+                    ]
+        , Html.node "style" [] [ Html.text "body { overflow: hidden; margin: 0; }" ]
         ]
     }
+
+
+normalModeView : NormalMode -> FrontendModel -> Html.Html msg
+normalModeView normalMode model =
+    let
+        camera =
+            Camera3d.lookAt
+                { eyePoint = normalMode.position
+                , focalPoint =
+                    Point3d.translateIn
+                        normalMode.direction
+                        Length.meter
+                        normalMode.position
+                , projection = Camera3d.Perspective
+                , fov = Camera3d.angle (Angle.degrees 80)
+                , upDirection = Direction3d.z
+                }
+
+        perspective : Mat4
+        perspective =
+            WebGL.Matrices.projectionMatrix
+                camera
+                { nearClipDepth = Length.centimeters 10
+                , farClipDepth = Length.meters 100
+                , aspectRatio = 1
+                }
+
+        viewMatrix : Mat4
+        viewMatrix =
+            WebGL.Matrices.viewMatrix camera
+
+        ( windowWidth, windowHeight ) =
+            Coord.toTuple normalMode.windowSize
+
+        ( cssWindowWidth, cssWindowHeight ) =
+            Coord.toTuple normalMode.cssCanvasSize
+    in
+    WebGL.toHtmlWith
+        [ WebGL.clearColor 1 1 0.9 1 ]
+        [ Html.Attributes.width windowWidth
+        , Html.Attributes.height windowHeight
+        , Html.Attributes.style "width" (String.fromInt cssWindowWidth ++ "px")
+        , Html.Attributes.style "height" (String.fromInt cssWindowHeight ++ "px")
+        ]
+        [ WebGL.entity
+            vertexShader
+            fragmentShader
+            sphere2
+            { perspective = perspective
+            , viewMatrix = viewMatrix
+            , modelTransform = Mat4.identity
+            , cameraPosition = Point3d.toVec3 normalMode.position
+            }
+        ]
 
 
 zNormal =
@@ -1386,25 +1556,6 @@ entities model =
                 else
                     []
                )
-            ++ List.filterMap
-                (\input ->
-                    case input.matrix of
-                        Just matrix ->
-                            WebGL.entity
-                                vertexShader
-                                fragmentShader
-                                splashSphere
-                                { perspective = xrView.projectionMatrix
-                                , viewMatrix = xrView.viewMatrix
-                                , modelTransform = matrix
-                                , cameraPosition = viewPosition
-                                }
-                                |> Just
-
-                        Nothing ->
-                            Nothing
-                )
-                inputs
 
 
 drawPreviewBrick : Vec3 -> WebGL.XrView -> Mat4 -> FrontendModel -> Entity
@@ -1487,19 +1638,17 @@ floorAxes =
 
 sphere1 : Mesh Vertex
 sphere1 =
-    sphere 0 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 8
+    sphere 0 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 0.01 8
 
 
-splashSphere =
-    sphere 0 (Vec4.vec4 0.7 0.8 1 1) Point3d.origin 4
+sphere2 : Mesh Vertex
+sphere2 =
+    sphere 0 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 1.3 8
 
 
-sphere : Float -> Vec4 -> Point3d u c -> Int -> Mesh Vertex
-sphere shininess color position detail =
+sphere : Float -> Vec4 -> Point3d u c -> Float -> Int -> Mesh Vertex
+sphere shininess color position radius detail =
     let
-        radius =
-            0.01
-
         uDetail =
             detail * 2
 
