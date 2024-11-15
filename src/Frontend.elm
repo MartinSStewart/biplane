@@ -113,12 +113,20 @@ mouseDecoder msg =
 
 gridUnitSize : Vector3d Meters World
 gridUnitSize =
-    Vector3d.millimeters 32 32 20
+    Vector3d.xyz gridUnitWidth gridUnitWidth gridUnitHeight
+
+
+gridUnitWidth =
+    Length.millimeters 32
+
+
+gridUnitHeight =
+    Length.millimeters 20
 
 
 gridZRatio : Float
 gridZRatio =
-    Quantity.ratio (Vector3d.zComponent gridUnitSize) (Vector3d.xComponent gridUnitSize)
+    Quantity.ratio gridUnitHeight (Vector3d.xComponent gridUnitSize)
 
 
 brickMesh : Time.Posix -> Brick -> List BrickVertex
@@ -232,6 +240,11 @@ red =
 
 init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 init url key =
+    let
+        bricks : List Brick
+        bricks =
+            [ { min = Coord.xy 0 0, max = Coord.xy 1 2, z = 0, color = red, placedAt = Time.millisToPosix 0 } ]
+    in
     ( { key = key
       , time = Time.millisToPosix 0
       , lastVrUpdate = Time.millisToPosix 0
@@ -243,8 +256,8 @@ init url key =
       , lagWarning = Time.millisToPosix 0
       , fontTexture = Loading
       , brickSize = Coord.xy 1 2
-      , bricks = []
-      , brickMesh = WebGL.indexedTriangles [] []
+      , bricks = bricks
+      , brickMesh = List.concatMap (brickMesh (Time.millisToPosix 0)) bricks |> quadsToMesh
       , lastUsedInput = WebGL.LeftHand
       , previousLeftInput = noInput
       , previousRightInput = noInput
@@ -308,7 +321,7 @@ bayerTexture =
 
 
 playerHeight =
-    Length.meters 2
+    Quantity.multiplyBy 3.5 gridUnitHeight
 
 
 update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -367,7 +380,7 @@ update msg model =
                                           else
                                             Vector3d.zero
                                         ]
-                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 100)
+                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 8)
 
                                 isOnGround : Bool
                                 isOnGround =
@@ -388,9 +401,9 @@ update msg model =
                                                 { x = v.x * 0.85
                                                 , y = v.y * 0.85
                                                 , z =
-                                                    if Debug.log "a" isOnGround then
+                                                    if isOnGround then
                                                         if SeqSet.member " " normalMode.keysDown then
-                                                            10
+                                                            1
 
                                                         else
                                                             0
@@ -1484,8 +1497,8 @@ normalModeView normalMode model =
         perspective =
             WebGL.Matrices.projectionMatrix
                 camera
-                { nearClipDepth = Length.centimeters 10
-                , farClipDepth = Length.kilometer
+                { nearClipDepth = Length.millimeters 1
+                , farClipDepth = Length.meters 100
                 , aspectRatio = toFloat windowWidth / toFloat windowHeight
                 }
 
@@ -1509,20 +1522,24 @@ normalModeView normalMode model =
         [ WebGL.entity
             vertexShader
             fragmentShader
-            sphere2
-            { perspective = perspective
-            , viewMatrix = viewMatrix
-            , modelTransform = Mat4.identity
-            , cameraPosition = Point3d.toVec3 normalMode.position
-            }
-        , WebGL.entity
-            vertexShader
-            fragmentShader
             square2
             { perspective = perspective
             , viewMatrix = viewMatrix
             , modelTransform = Mat4.identity
             , cameraPosition = Point3d.toVec3 normalMode.position
+            }
+        , WebGL.entityWith
+            [ DepthTest.default
+            , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
+            , blend
+            ]
+            brickVertexShader
+            brickFragmentShader
+            model.brickMesh
+            { perspective = perspective
+            , viewMatrix = viewMatrix
+            , modelTransform = Mat4.identity
+            , elapsedTime = Duration.from model.startTime model.time |> Duration.inMilliseconds
             }
         ]
 
