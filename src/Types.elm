@@ -64,6 +64,7 @@ type alias NormalMode =
     , cssCanvasSize : Coord CssPixels
     , devicePixelRatio : Float
     , keysDown : SeqSet String
+    , isMouseLocked : Bool
     }
 
 
@@ -163,6 +164,7 @@ type FrontendMsg
     | GotDevicePixelRatio Float
     | MouseMoved Float Float
     | MouseDown
+    | PointerLockChanged Bool
 
 
 type ToBackend

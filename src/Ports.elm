@@ -1,4 +1,4 @@
-port module Ports exposing (getDevicePixelRatio, gotConsoleLog, gotDevicePixelRatio, loadSounds, playSound, repeatSound, requestPointerLock, soundsLoaded)
+port module Ports exposing (getDevicePixelRatio, gotConsoleLog, gotDevicePixelRatio, loadSounds, playSound, pointerLockChange, repeatSound, requestPointerLock, soundsLoaded)
 
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -28,6 +28,21 @@ port martinsstewart_elm_device_pixel_ratio_to_js : Json.Encode.Value -> Cmd msg
 
 
 port request_pointer_lock_to_js : Json.Encode.Value -> Cmd msg
+
+
+port pointer_lock_change_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+pointerLockChange : (Bool -> msg) -> Subscription.Subscription FrontendOnly msg
+pointerLockChange msg =
+    Subscription.fromJs
+        "pointer_lock_change_from_js"
+        pointer_lock_change_from_js
+        (\value ->
+            Json.Decode.decodeValue Json.Decode.bool value
+                |> Result.withDefault False
+                |> msg
+        )
 
 
 requestPointerLock : Command FrontendOnly toMsg msg

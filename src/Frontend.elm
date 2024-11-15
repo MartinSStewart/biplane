@@ -64,32 +64,35 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions =
-            \model ->
-                Subscription.batch
-                    [ case model.isInVr of
-                        IsInMenu ->
-                            Subscription.none
-
-                        IsInNormalMode _ ->
-                            Subscription.batch
-                                [ Ports.gotDevicePixelRatio GotDevicePixelRatio
-                                , Effect.Browser.Events.onResize (\width height -> WindowResized (Coord.xy width height))
-                                , Effect.Browser.Events.onKeyDown (keyDecoder KeyDown)
-                                , Effect.Browser.Events.onKeyUp (keyDecoder KeyUp)
-                                , Effect.Browser.Events.onAnimationFrame AnimationFrame
-                                , Effect.Browser.Events.onMouseMove (mouseDecoder MouseMoved)
-                                , Effect.Browser.Events.onMouseDown (mouseDecoder (\_ _ -> MouseDown))
-                                ]
-
-                        IsInVr ->
-                            Effect.Browser.Events.onAnimationFrame AnimationFrame
-                    , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
-                    , Ports.soundsLoaded SoundsLoaded
-                    , Ports.gotConsoleLog GotConsoleLog
-                    ]
+        , subscriptions = subscriptions
         , view = view
         }
+
+
+subscriptions model =
+    Subscription.batch
+        [ case model.isInVr of
+            IsInMenu ->
+                Subscription.none
+
+            IsInNormalMode _ ->
+                Subscription.batch
+                    [ Ports.gotDevicePixelRatio GotDevicePixelRatio
+                    , Effect.Browser.Events.onResize (\width height -> WindowResized (Coord.xy width height))
+                    , Effect.Browser.Events.onKeyDown (keyDecoder KeyDown)
+                    , Effect.Browser.Events.onKeyUp (keyDecoder KeyUp)
+                    , Effect.Browser.Events.onAnimationFrame AnimationFrame
+                    , Effect.Browser.Events.onMouseMove (mouseDecoder MouseMoved)
+                    , Effect.Browser.Events.onMouseDown (mouseDecoder (\_ _ -> MouseDown))
+                    , Ports.pointerLockChange PointerLockChanged
+                    ]
+
+            IsInVr ->
+                Effect.Browser.Events.onAnimationFrame AnimationFrame
+        , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
+        , Ports.soundsLoaded SoundsLoaded
+        , Ports.gotConsoleLog GotConsoleLog
+        ]
 
 
 keyDecoder : (String -> msg) -> Json.Decode.Decoder msg
@@ -505,6 +508,7 @@ update msg model =
                         , cssWindowSize = Coord.xy 100 100
                         , cssCanvasSize = Coord.xy 100 100
                         , keysDown = SeqSet.empty
+                        , isMouseLocked = False
                         }
               }
             , Command.batch
@@ -516,48 +520,29 @@ update msg model =
             )
 
         WindowResized windowSize ->
-            case model.isInVr of
-                IsInNormalMode normalMode ->
-                    let
-                        ( normalMode2, cmd ) =
-                            windowResizedUpdate windowSize normalMode
-                    in
-                    ( { model | isInVr = IsInNormalMode normalMode2 }, cmd )
-
-                _ ->
-                    ( model, Command.none )
+            updateNormalMode (windowResizedUpdate windowSize) model
 
         GotDevicePixelRatio devicePixelRatio ->
-            case model.isInVr of
-                IsInNormalMode normalMode ->
-                    let
-                        ( normalMode2, cmd ) =
-                            devicePixelRatioChanged devicePixelRatio normalMode
-                    in
-                    ( { model | isInVr = IsInNormalMode normalMode2 }, cmd )
-
-                _ ->
-                    ( model, Command.none )
+            updateNormalMode (devicePixelRatioChanged devicePixelRatio) model
 
         MouseMoved x y ->
-            ( { model
-                | isInVr =
-                    case model.isInVr of
-                        IsInNormalMode normalMode ->
-                            { normalMode
-                                | longitude =
-                                    Angle.degrees (-x / 8) |> Quantity.plus normalMode.longitude
-                                , latitude =
-                                    Quantity.plus (Angle.degrees (y / 8)) normalMode.latitude
-                                        |> Quantity.clamp (Angle.degrees -89) (Angle.degrees 89)
-                            }
-                                |> IsInNormalMode
+            updateNormalMode
+                (\normalMode ->
+                    ( if normalMode.isMouseLocked then
+                        { normalMode
+                            | longitude =
+                                Angle.degrees (-x / 8) |> Quantity.plus normalMode.longitude
+                            , latitude =
+                                Quantity.plus (Angle.degrees (y / 8)) normalMode.latitude
+                                    |> Quantity.clamp (Angle.degrees -89) (Angle.degrees 89)
+                        }
 
-                        _ ->
-                            model.isInVr
-              }
-            , Command.none
-            )
+                      else
+                        normalMode
+                    , Command.none
+                    )
+                )
+                model
 
         MouseDown ->
             ( model
@@ -568,6 +553,26 @@ update msg model =
                 _ ->
                     Command.none
             )
+
+        PointerLockChanged isLocked ->
+            updateNormalMode (\normalMode -> ( { normalMode | isMouseLocked = isLocked }, Command.none )) model
+
+
+updateNormalMode :
+    (NormalMode -> ( NormalMode, Command FrontendOnly ToBackend FrontendMsg ))
+    -> FrontendModel
+    -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+updateNormalMode updateFunc model =
+    case model.isInVr of
+        IsInNormalMode normalMode ->
+            let
+                ( normalMode2, cmd ) =
+                    updateFunc normalMode
+            in
+            ( { model | isInVr = IsInNormalMode normalMode2 }, cmd )
+
+        _ ->
+            ( model, Command.none )
 
 
 windowResizedUpdate :

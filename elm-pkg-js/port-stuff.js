@@ -51,4 +51,10 @@ exports.init = async function(app) {
     app.ports.request_pointer_lock_to_js.subscribe(a => document.body.requestPointerLock());
 
     app.ports.martinsstewart_elm_device_pixel_ratio_to_js.subscribe(a => app.ports.martinsstewart_elm_device_pixel_ratio_from_js.send(window.devicePixelRatio));
+
+    document.addEventListener("pointerlockchange", (a) => {
+        app.ports.pointer_lock_change_from_js.send(document.pointerLockElement !== null);
+    });
+
+
 }
