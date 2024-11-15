@@ -20,6 +20,7 @@ import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Rate, Unitless)
 import SeqSet exposing (SeqSet)
+import Speed exposing (MetersPerSecond)
 import Url exposing (Url)
 import Vector3d exposing (Vector3d)
 
@@ -57,6 +58,7 @@ type IsInVr
 
 type alias NormalMode =
     { position : Point3d Meters World
+    , velocity : Vector3d MetersPerSecond World
     , longitude : Angle
     , latitude : Angle
     , windowSize : Coord Pixels

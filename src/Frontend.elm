@@ -1,5 +1,6 @@
 module Frontend exposing (app)
 
+import Acceleration exposing (MetersPerSecondSquared)
 import Angle
 import Array exposing (Array)
 import Array2D
@@ -46,6 +47,7 @@ import Point3d exposing (Point3d)
 import Ports
 import Quantity exposing (Product, Quantity(..), Rate)
 import SeqSet exposing (SeqSet)
+import Speed exposing (MetersPerSecond)
 import TriangularMesh
 import Types exposing (..)
 import Unsafe
@@ -305,6 +307,10 @@ bayerTexture =
         |> Unsafe.assumeOk
 
 
+playerHeight =
+    Length.meters 2
+
+
 update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 update msg model =
     case msg of
@@ -327,45 +333,91 @@ update msg model =
             ( model, Command.none )
 
         AnimationFrame time ->
+            let
+                elapsed =
+                    Duration.from model.time time
+            in
             ( { model
                 | time = time
                 , isInVr =
                     case model.isInVr of
                         IsInNormalMode normalMode ->
                             let
-                                v =
+                                acceleration : Vector3d MetersPerSecondSquared World
+                                acceleration =
                                     Vector3d.sum
                                         [ if SeqSet.member "w" normalMode.keysDown then
-                                            Vector3d.meters 1 0 0
+                                            Vector3d.metersPerSecondSquared 1 0 0
 
                                           else
                                             Vector3d.zero
                                         , if SeqSet.member "s" normalMode.keysDown then
-                                            Vector3d.meters -1 0 0
+                                            Vector3d.metersPerSecondSquared -1 0 0
 
                                           else
                                             Vector3d.zero
                                         , if SeqSet.member "a" normalMode.keysDown then
-                                            Vector3d.meters 0 1 0
+                                            Vector3d.metersPerSecondSquared 0 1 0
 
                                           else
                                             Vector3d.zero
                                         , if SeqSet.member "d" normalMode.keysDown then
-                                            Vector3d.meters 0 -1 0
+                                            Vector3d.metersPerSecondSquared 0 -1 0
 
                                           else
                                             Vector3d.zero
                                         ]
-                                        |> Vector3d.normalize
+                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 100)
+
+                                isOnGround : Bool
+                                isOnGround =
+                                    Point3d.zCoordinate normalMode.position
+                                        |> Quantity.lessThanOrEqualTo playerHeight
+
+                                velocity : Vector3d MetersPerSecond World
+                                velocity =
+                                    Vector3d.sum
+                                        [ acceleration
+                                            |> Vector3d.rotateAround Axis3d.z normalMode.longitude
+                                            |> Vector3d.for elapsed
+                                        , normalMode.velocity
+                                        , Vector3d.for elapsed gravity
+                                        ]
                                         |> Vector3d.unwrap
+                                        |> (\v ->
+                                                { x = v.x * 0.85
+                                                , y = v.y * 0.85
+                                                , z =
+                                                    if Debug.log "a" isOnGround then
+                                                        if SeqSet.member " " normalMode.keysDown then
+                                                            10
+
+                                                        else
+                                                            0
+
+                                                    else
+                                                        v.z * 0.99
+                                                }
+                                           )
                                         |> Vector3d.unsafe
-                                        |> Vector3d.scaleBy 0.1
                             in
                             { normalMode
                                 | position =
-                                    Point3d.translateBy
-                                        (Vector3d.rotateAround Axis3d.z normalMode.longitude v)
-                                        normalMode.position
+                                    Point3d.translateBy (Vector3d.for elapsed velocity) normalMode.position
+                                        |> Point3d.unwrap
+                                        |> (\p ->
+                                                { x = p.x
+                                                , y = p.y
+                                                , z =
+                                                    if p.z < Length.inMeters playerHeight then
+                                                        Length.inMeters playerHeight
+
+                                                    else
+                                                        p.z
+                                                }
+                                           )
+                                        |> Point3d.unsafe
+                                , velocity = velocity
                             }
                                 |> IsInNormalMode
 
@@ -500,7 +552,8 @@ update msg model =
             ( { model
                 | isInVr =
                     IsInNormalMode
-                        { position = Point3d.meters 0 0 2
+                        { position = Point3d.xyz Quantity.zero Quantity.zero playerHeight
+                        , velocity = Vector3d.zero
                         , longitude = Quantity.zero
                         , latitude = Quantity.zero
                         , devicePixelRatio = 1
@@ -1240,12 +1293,9 @@ vrUpdate pose model =
     )
 
 
-gravity : Vector3d (Rate (Rate Meters Seconds) Seconds) World
+gravity : Vector3d MetersPerSecondSquared World
 gravity =
-    Vector3d.xyz
-        Quantity.zero
-        Quantity.zero
-        (Quantity.rate (Quantity.rate (Length.meters -3) Duration.second) Duration.second)
+    Vector3d.metersPerSecondSquared 0 0 -3
 
 
 mat4ToFrame3d : Mat4 -> Frame3d u c d
