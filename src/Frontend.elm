@@ -42,7 +42,7 @@ import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
 import Math.Vector4 as Vec4 exposing (Vec4)
 import Pixels exposing (Pixels)
-import Point2d
+import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Ports
 import Quantity exposing (Product, Quantity(..), Rate)
@@ -52,6 +52,7 @@ import TriangularMesh
 import Types exposing (..)
 import Unsafe
 import Url
+import Vector2d exposing (Vector2d)
 import Vector3d exposing (Vector3d)
 import WebGL.Matrices
 import WebGL.Settings.Blend as Blend
@@ -243,7 +244,7 @@ init url key =
     let
         bricks : List Brick
         bricks =
-            [ { min = Coord.xy 0 0, max = Coord.xy 1 2, z = 0, color = red, placedAt = Time.millisToPosix 0 } ]
+            [ { min = Coord.xy 5 0, max = Coord.xy 6 2, z = 0, color = red, placedAt = Time.millisToPosix 0 } ]
     in
     ( { key = key
       , time = Time.millisToPosix 0
@@ -320,6 +321,12 @@ bayerTexture =
         |> Unsafe.assumeOk
 
 
+playerWidth : Quantity Float Meters
+playerWidth =
+    Quantity.multiplyBy 0.8 gridUnitWidth
+
+
+playerHeight : Quantity Float Meters
 playerHeight =
     Quantity.multiplyBy 3.5 gridUnitHeight
 
@@ -380,7 +387,7 @@ update msg model =
                                           else
                                             Vector3d.zero
                                         ]
-                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 8)
+                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 3)
 
                                 isOnGround : Bool
                                 isOnGround =
@@ -394,7 +401,8 @@ update msg model =
                                             |> Vector3d.rotateAround Axis3d.z normalMode.longitude
                                             |> Vector3d.for elapsed
                                         , normalMode.velocity
-                                        , Vector3d.for elapsed gravity
+
+                                        --, Vector3d.for elapsed gravity
                                         ]
                                         |> Vector3d.unwrap
                                         |> (\v ->
@@ -413,23 +421,102 @@ update msg model =
                                                 }
                                            )
                                         |> Vector3d.unsafe
+
+                                pos =
+                                    case model.bricks of
+                                        head :: _ ->
+                                            let
+                                                ( Quantity minX, Quantity minY ) =
+                                                    head.min
+
+                                                ( Quantity maxX, Quantity maxY ) =
+                                                    head.max
+
+                                                gSize : { x : Float, y : Float, z : Float }
+                                                gSize =
+                                                    Vector3d.toMeters gridUnitSize
+
+                                                p =
+                                                    Point3d.toMeters normalMode.position
+
+                                                v =
+                                                    Vector3d.for elapsed velocity |> Vector3d.toMeters
+
+                                                cast =
+                                                    raycast
+                                                        normalMode.position
+                                                        (Vector3d.for elapsed velocity)
+                                                        (Point3d.unsafe
+                                                            { x = gSize.x * toFloat minX
+                                                            , y = gSize.y * toFloat minY
+                                                            , z = gSize.z * toFloat head.z
+                                                            }
+                                                        )
+                                                        (Point3d.unsafe
+                                                            { x = gSize.x * toFloat maxX
+                                                            , y = gSize.y * toFloat maxY
+                                                            , z = gSize.z * toFloat (head.z + 1) + Length.inMeters playerHeight
+                                                            }
+                                                        )
+                                            in
+                                            case cast of
+                                                Just { intersection, normal } ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "a" normal
+                                                    in
+                                                    intersection |> Point3d.translateIn normal (Length.centimeters 0.1)
+
+                                                Nothing ->
+                                                    Point3d.translateBy
+                                                        (Vector3d.for elapsed velocity)
+                                                        normalMode.position
+
+                                        --lineIntersectsBoundingBox
+                                        --    (gSize.x * toFloat minX)
+                                        --    (gSize.y * toFloat minY)
+                                        --    (gSize.z * toFloat head.z)
+                                        --    (gSize.x * toFloat maxX)
+                                        --    (gSize.y * toFloat maxY)
+                                        --    (gSize.z * toFloat (head.z + 1) + Length.inMeters playerHeight)
+                                        --    p.x
+                                        --    p.y
+                                        --    p.z
+                                        --    v.x
+                                        --    v.y
+                                        --    v.z
+                                        --    |> (\maybe ->
+                                        --            case maybe of
+                                        --                Just a ->
+                                        --                    Point3d.meters
+                                        --                        a.intersectionX
+                                        --                        a.intersectionY
+                                        --                        a.intersectionZ
+                                        --
+                                        --                Nothing ->
+                                        --                    Point3d.translateBy
+                                        --                        (Vector3d.for elapsed velocity)
+                                        --                        normalMode.position
+                                        --       )
+                                        [] ->
+                                            Debug.todo ""
                             in
                             { normalMode
-                                | position =
-                                    Point3d.translateBy (Vector3d.for elapsed velocity) normalMode.position
-                                        |> Point3d.unwrap
-                                        |> (\p ->
-                                                { x = p.x
-                                                , y = p.y
-                                                , z =
-                                                    if p.z < Length.inMeters playerHeight then
-                                                        Length.inMeters playerHeight
+                                | position = pos
 
-                                                    else
-                                                        p.z
-                                                }
-                                           )
-                                        |> Point3d.unsafe
+                                --|> Point3d.unwrap
+                                --|> (\p ->
+                                --        { x = p.x
+                                --        , y = p.y
+                                --        , z =
+                                --            if p.z < Length.inMeters playerHeight then
+                                --                Length.inMeters playerHeight
+                                --
+                                --            else
+                                --                p.z
+                                --        }
+                                --   )
+                                --|> Point3d.unsafe
                                 , velocity = velocity
                             }
                                 |> IsInNormalMode
@@ -622,6 +709,150 @@ update msg model =
 
         PointerLockChanged isLocked ->
             updateNormalMode (\normalMode -> ( { normalMode | isMouseLocked = isLocked }, Command.none )) model
+
+
+distanceToCube : Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float
+distanceToCube cubeMinX cubeMinY cubeMinZ cubeMaxX cubeMaxY cubeMaxZ pointX pointY pointZ =
+    let
+        dx =
+            max (cubeMinX - pointX) (max 0 (pointX - cubeMaxX))
+
+        dy =
+            max (cubeMinY - pointY) (max 0 (pointY - cubeMaxY))
+
+        dz =
+            max (cubeMinZ - pointZ) (max 0 (pointZ - cubeMaxZ))
+    in
+    sqrt (dx * dx + dy * dy + dz * dz)
+
+
+raycast : Point3d u c -> Vector3d u c -> Point3d u c -> Point3d u c -> Maybe { intersection : Point3d u c, normal : Direction3d c }
+raycast ray delta boxMin boxMax =
+    let
+        boxMin2 =
+            Point3d.unwrap boxMin
+
+        boxMax2 =
+            Point3d.unwrap boxMax
+
+        ray2 =
+            Point3d.unwrap ray
+
+        delta2 =
+            Vector3d.unwrap delta
+
+        t1 =
+            (boxMin2.x - ray2.x) / delta2.x
+
+        t2 =
+            (boxMax2.x - ray2.x) / delta2.x
+
+        t3 =
+            (boxMin2.y - ray2.y) / delta2.y
+
+        t4 =
+            (boxMax2.y - ray2.y) / delta2.y
+
+        t5 =
+            (boxMin2.z - ray2.z) / delta2.z
+
+        t6 =
+            (boxMax2.z - ray2.z) / delta2.z
+
+        tmin =
+            max (max (min t1 t2) (min t3 t4)) (min t5 t6)
+
+        tmax =
+            min (min (max t1 t2) (max t3 t4)) (max t5 t6)
+    in
+    if tmax < 0 then
+        Nothing
+
+    else if tmin > tmax then
+        Nothing
+
+    else if tmin < 0 then
+        if tmax < 1 then
+            Just
+                { intersection = Point3d.translateBy (Vector3d.scaleBy tmax delta) ray
+                , normal =
+                    Direction3d.unsafe
+                        { x =
+                            if tmax == t1 || tmax == t2 then
+                                if ray2.x > (boxMax2.x + boxMin2.x) / 2 then
+                                    1
+
+                                else
+                                    -1
+
+                            else
+                                0
+                        , y =
+                            if tmax == t3 || tmax == t4 then
+                                if ray2.y > (boxMax2.y + boxMin2.y) / 2 then
+                                    1
+
+                                else
+                                    -1
+
+                            else
+                                0
+                        , z =
+                            if tmax == t5 || tmax == t6 then
+                                if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
+                                    1
+
+                                else
+                                    -1
+
+                            else
+                                0
+                        }
+                }
+
+        else
+            Nothing
+
+    else if tmin < 1 then
+        Just
+            { intersection = Point3d.translateBy (Vector3d.scaleBy tmin delta) ray
+            , normal =
+                Direction3d.unsafe
+                    { x =
+                        if tmax == t1 || tmax == t2 then
+                            if ray2.x > (boxMax2.x + boxMin2.x) / 2 then
+                                1
+
+                            else
+                                -1
+
+                        else
+                            0
+                    , y =
+                        if tmax == t3 || tmax == t4 then
+                            if ray2.y > (boxMax2.y + boxMin2.y) / 2 then
+                                1
+
+                            else
+                                -1
+
+                        else
+                            0
+                    , z =
+                        if tmax == t5 || tmax == t6 then
+                            if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
+                                1
+
+                            else
+                                -1
+
+                        else
+                            0
+                    }
+            }
+
+    else
+        Nothing
 
 
 updateNormalMode :
@@ -1513,7 +1744,7 @@ normalModeView normalMode model =
             Coord.toTuple normalMode.cssCanvasSize
     in
     WebGL.toHtmlWith
-        [ WebGL.clearColor 1 1 0.9 1 ]
+        [ WebGL.clearColor 0.9 0.95 1 1 ]
         [ Html.Attributes.width windowWidth
         , Html.Attributes.height windowHeight
         , Html.Attributes.style "width" (String.fromInt cssWindowWidth ++ "px")
@@ -1540,6 +1771,15 @@ normalModeView normalMode model =
             , viewMatrix = viewMatrix
             , modelTransform = Mat4.identity
             , elapsedTime = Duration.from model.startTime model.time |> Duration.inMilliseconds
+            }
+        , WebGL.entity
+            vertexShader
+            fragmentShader
+            floorAxes
+            { perspective = perspective
+            , viewMatrix = viewMatrix
+            , modelTransform = Mat4.identity
+            , cameraPosition = Point3d.toVec3 normalMode.position
             }
         ]
 

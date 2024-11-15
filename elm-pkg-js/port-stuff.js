@@ -13,7 +13,6 @@ exports.init = async function(app) {
     console.stdlog = console.log.bind(console);
     console.log = function(){
         setTimeout(() => app.ports.console_log_from_js.send(arguments[0]), 1);
-        console.stdlog(arguments);
         console.stdlog.apply(console, arguments);
     }
 
