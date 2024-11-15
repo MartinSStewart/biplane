@@ -747,11 +747,23 @@ raycast ray delta boxMin boxMax =
         t2 =
             (boxMax2.x - ray2.x) / delta2.x
 
+        txNear =
+            min t1 t2
+
+        txFar =
+            max t1 t2
+
         t3 =
             (boxMin2.y - ray2.y) / delta2.y
 
         t4 =
             (boxMax2.y - ray2.y) / delta2.y
+
+        tyNear =
+            min t3 t4
+
+        tyFar =
+            max t3 t4
 
         t5 =
             (boxMin2.z - ray2.z) / delta2.z
@@ -759,11 +771,67 @@ raycast ray delta boxMin boxMax =
         t6 =
             (boxMax2.z - ray2.z) / delta2.z
 
+        tzNear =
+            min t5 t6
+
+        tzFar =
+            max t5 t6
+
         tmin =
-            max (max (min t1 t2) (min t3 t4)) (min t5 t6)
+            max (max txNear tyNear) tzNear
 
         tmax =
-            min (min (max t1 t2) (max t3 t4)) (max t5 t6)
+            min (min txFar tyFar) tzFar
+
+        normal =
+            if txNear > tyNear then
+                if tzNear > txNear then
+                    Direction3d.unsafe
+                        { x = 0
+                        , y = 0
+                        , z =
+                            if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
+                                1
+
+                            else
+                                -1
+                        }
+
+                else
+                    Direction3d.unsafe
+                        { x =
+                            if ray2.x > (boxMax2.x + boxMin2.x) / 2 then
+                                1
+
+                            else
+                                -1
+                        , y = 0
+                        , z = 0
+                        }
+
+            else if tzNear > tyNear then
+                Direction3d.unsafe
+                    { x = 0
+                    , y = 0
+                    , z =
+                        if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
+                            1
+
+                        else
+                            -1
+                    }
+
+            else
+                Direction3d.unsafe
+                    { x = 0
+                    , y =
+                        if ray2.y > (boxMax2.y + boxMin2.y) / 2 then
+                            1
+
+                        else
+                            -1
+                    , z = 0
+                    }
     in
     if tmax < 0 then
         Nothing
@@ -775,39 +843,7 @@ raycast ray delta boxMin boxMax =
         if tmax < 1 then
             Just
                 { intersection = Point3d.translateBy (Vector3d.scaleBy tmax delta) ray
-                , normal =
-                    Direction3d.unsafe
-                        { x =
-                            if tmax == t1 || tmax == t2 then
-                                if ray2.x > (boxMax2.x + boxMin2.x) / 2 then
-                                    1
-
-                                else
-                                    -1
-
-                            else
-                                0
-                        , y =
-                            if tmax == t3 || tmax == t4 then
-                                if ray2.y > (boxMax2.y + boxMin2.y) / 2 then
-                                    1
-
-                                else
-                                    -1
-
-                            else
-                                0
-                        , z =
-                            if tmax == t5 || tmax == t6 then
-                                if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
-                                    1
-
-                                else
-                                    -1
-
-                            else
-                                0
-                        }
+                , normal = normal
                 }
 
         else
@@ -816,39 +852,7 @@ raycast ray delta boxMin boxMax =
     else if tmin < 1 then
         Just
             { intersection = Point3d.translateBy (Vector3d.scaleBy tmin delta) ray
-            , normal =
-                Direction3d.unsafe
-                    { x =
-                        if tmax == t1 || tmax == t2 then
-                            if ray2.x > (boxMax2.x + boxMin2.x) / 2 then
-                                1
-
-                            else
-                                -1
-
-                        else
-                            0
-                    , y =
-                        if tmax == t3 || tmax == t4 then
-                            if ray2.y > (boxMax2.y + boxMin2.y) / 2 then
-                                1
-
-                            else
-                                -1
-
-                        else
-                            0
-                    , z =
-                        if tmax == t5 || tmax == t6 then
-                            if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
-                                1
-
-                            else
-                                -1
-
-                        else
-                            0
-                    }
+            , normal = normal
             }
 
     else
