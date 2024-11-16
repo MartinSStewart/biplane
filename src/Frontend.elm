@@ -331,6 +331,92 @@ playerHeight =
     Quantity.multiplyBy 3.5 gridUnitHeight
 
 
+movePlayer :
+    Brick
+    -> Duration
+    -> Point3d Meters World
+    -> Vector3d MetersPerSecond World
+    -> { position : Point3d Meters World, velocity : Vector3d MetersPerSecond World }
+movePlayer head elapsed position velocity =
+    let
+        ( Quantity minX, Quantity minY ) =
+            head.min
+
+        ( Quantity maxX, Quantity maxY ) =
+            head.max
+
+        gSize : { x : Float, y : Float, z : Float }
+        gSize =
+            Vector3d.toMeters gridUnitSize
+
+        cast : Maybe { intersection : Point3d Meters World, normal : BoxNormal, t : Float }
+        cast =
+            raycast
+                position
+                (Vector3d.for elapsed velocity)
+                (Point3d.unsafe
+                    { x = gSize.x * toFloat minX
+                    , y = gSize.y * toFloat minY
+                    , z = gSize.z * toFloat head.z
+                    }
+                )
+                (Point3d.unsafe
+                    { x = gSize.x * toFloat maxX
+                    , y = gSize.y * toFloat maxY
+                    , z = gSize.z * toFloat (head.z + 1) + Length.inMeters playerHeight
+                    }
+                )
+    in
+    case cast of
+        Just { intersection, normal, t } ->
+            let
+                v =
+                    Vector3d.unwrap velocity
+
+                ( velocity2, offset ) =
+                    case normal of
+                        XPositive ->
+                            ( Vector3d.unsafe { x = 0, y = v.y, z = v.z }
+                            , Vector3d.millimeters 0.01 0 0
+                            )
+
+                        XNegative ->
+                            ( Vector3d.unsafe { x = 0, y = v.y, z = v.z }
+                            , Vector3d.millimeters -0.01 0 0
+                            )
+
+                        YPositive ->
+                            ( Vector3d.unsafe { x = v.x, y = 0, z = v.z }
+                            , Vector3d.millimeters 0 0.01 0
+                            )
+
+                        YNegative ->
+                            ( Vector3d.unsafe { x = v.x, y = 0, z = v.z }
+                            , Vector3d.millimeters 0 -0.01 0
+                            )
+
+                        ZPositive ->
+                            ( Vector3d.unsafe { x = v.x, y = v.y, z = 0 }
+                            , Vector3d.millimeters 0 0 0.01
+                            )
+
+                        ZNegative ->
+                            ( Vector3d.unsafe { x = v.x, y = v.y, z = 0 }
+                            , Vector3d.millimeters 0 0 -0.01
+                            )
+            in
+            movePlayer
+                head
+                (Quantity.multiplyBy (1 - t) elapsed)
+                (Point3d.translateBy offset intersection)
+                velocity2
+
+        Nothing ->
+            { position = Point3d.translateBy (Vector3d.for elapsed velocity) position
+            , velocity = velocity
+            }
+
+
 update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 update msg model =
     case msg of
@@ -422,102 +508,18 @@ update msg model =
                                            )
                                         |> Vector3d.unsafe
 
-                                pos =
+                                moved : { position : Point3d Meters World, velocity : Vector3d MetersPerSecond World }
+                                moved =
                                     case model.bricks of
                                         head :: _ ->
-                                            let
-                                                ( Quantity minX, Quantity minY ) =
-                                                    head.min
+                                            movePlayer head elapsed normalMode.position velocity
 
-                                                ( Quantity maxX, Quantity maxY ) =
-                                                    head.max
-
-                                                gSize : { x : Float, y : Float, z : Float }
-                                                gSize =
-                                                    Vector3d.toMeters gridUnitSize
-
-                                                p =
-                                                    Point3d.toMeters normalMode.position
-
-                                                v =
-                                                    Vector3d.for elapsed velocity |> Vector3d.toMeters
-
-                                                cast =
-                                                    raycast
-                                                        normalMode.position
-                                                        (Vector3d.for elapsed velocity)
-                                                        (Point3d.unsafe
-                                                            { x = gSize.x * toFloat minX
-                                                            , y = gSize.y * toFloat minY
-                                                            , z = gSize.z * toFloat head.z
-                                                            }
-                                                        )
-                                                        (Point3d.unsafe
-                                                            { x = gSize.x * toFloat maxX
-                                                            , y = gSize.y * toFloat maxY
-                                                            , z = gSize.z * toFloat (head.z + 1) + Length.inMeters playerHeight
-                                                            }
-                                                        )
-                                            in
-                                            case cast of
-                                                Just { intersection, normal } ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "a" normal
-                                                    in
-                                                    intersection |> Point3d.translateIn normal (Length.centimeters 0.1)
-
-                                                Nothing ->
-                                                    Point3d.translateBy
-                                                        (Vector3d.for elapsed velocity)
-                                                        normalMode.position
-
-                                        --lineIntersectsBoundingBox
-                                        --    (gSize.x * toFloat minX)
-                                        --    (gSize.y * toFloat minY)
-                                        --    (gSize.z * toFloat head.z)
-                                        --    (gSize.x * toFloat maxX)
-                                        --    (gSize.y * toFloat maxY)
-                                        --    (gSize.z * toFloat (head.z + 1) + Length.inMeters playerHeight)
-                                        --    p.x
-                                        --    p.y
-                                        --    p.z
-                                        --    v.x
-                                        --    v.y
-                                        --    v.z
-                                        --    |> (\maybe ->
-                                        --            case maybe of
-                                        --                Just a ->
-                                        --                    Point3d.meters
-                                        --                        a.intersectionX
-                                        --                        a.intersectionY
-                                        --                        a.intersectionZ
-                                        --
-                                        --                Nothing ->
-                                        --                    Point3d.translateBy
-                                        --                        (Vector3d.for elapsed velocity)
-                                        --                        normalMode.position
-                                        --       )
                                         [] ->
                                             Debug.todo ""
                             in
                             { normalMode
-                                | position = pos
-
-                                --|> Point3d.unwrap
-                                --|> (\p ->
-                                --        { x = p.x
-                                --        , y = p.y
-                                --        , z =
-                                --            if p.z < Length.inMeters playerHeight then
-                                --                Length.inMeters playerHeight
-                                --
-                                --            else
-                                --                p.z
-                                --        }
-                                --   )
-                                --|> Point3d.unsafe
-                                , velocity = velocity
+                                | position = moved.position
+                                , velocity = moved.velocity
                             }
                                 |> IsInNormalMode
 
@@ -726,7 +728,26 @@ distanceToCube cubeMinX cubeMinY cubeMinZ cubeMaxX cubeMaxY cubeMaxZ pointX poin
     sqrt (dx * dx + dy * dy + dz * dz)
 
 
-raycast : Point3d u c -> Vector3d u c -> Point3d u c -> Point3d u c -> Maybe { intersection : Point3d u c, normal : Direction3d c }
+type BoxNormal
+    = XPositive
+    | XNegative
+    | YPositive
+    | YNegative
+    | ZPositive
+    | ZNegative
+
+
+raycast :
+    Point3d u c
+    -> Vector3d u c
+    -> Point3d u c
+    -> Point3d u c
+    ->
+        Maybe
+            { t : Float
+            , intersection : Point3d u c
+            , normal : BoxNormal
+            }
 raycast ray delta boxMin boxMax =
     let
         boxMin2 =
@@ -786,52 +807,30 @@ raycast ray delta boxMin boxMax =
         normal =
             if txNear > tyNear then
                 if tzNear > txNear then
-                    Direction3d.unsafe
-                        { x = 0
-                        , y = 0
-                        , z =
-                            if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
-                                1
+                    if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
+                        ZPositive
 
-                            else
-                                -1
-                        }
+                    else
+                        ZNegative
+
+                else if ray2.x > (boxMax2.x + boxMin2.x) / 2 then
+                    XPositive
 
                 else
-                    Direction3d.unsafe
-                        { x =
-                            if ray2.x > (boxMax2.x + boxMin2.x) / 2 then
-                                1
-
-                            else
-                                -1
-                        , y = 0
-                        , z = 0
-                        }
+                    XNegative
 
             else if tzNear > tyNear then
-                Direction3d.unsafe
-                    { x = 0
-                    , y = 0
-                    , z =
-                        if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
-                            1
+                if ray2.z > (boxMax2.z + boxMin2.z) / 2 then
+                    ZPositive
 
-                        else
-                            -1
-                    }
+                else
+                    ZNegative
+
+            else if ray2.y > (boxMax2.y + boxMin2.y) / 2 then
+                YPositive
 
             else
-                Direction3d.unsafe
-                    { x = 0
-                    , y =
-                        if ray2.y > (boxMax2.y + boxMin2.y) / 2 then
-                            1
-
-                        else
-                            -1
-                    , z = 0
-                    }
+                YNegative
     in
     if tmax < 0 then
         Nothing
@@ -844,6 +843,7 @@ raycast ray delta boxMin boxMax =
             Just
                 { intersection = Point3d.translateBy (Vector3d.scaleBy tmax delta) ray
                 , normal = normal
+                , t = tmax
                 }
 
         else
@@ -853,6 +853,7 @@ raycast ray delta boxMin boxMax =
         Just
             { intersection = Point3d.translateBy (Vector3d.scaleBy tmin delta) ray
             , normal = normal
+            , t = tmin
             }
 
     else
