@@ -244,7 +244,10 @@ init url key =
     let
         bricks : List Brick
         bricks =
-            [ { min = Coord.xy 5 0, max = Coord.xy 6 2, z = 0, color = red, placedAt = Time.millisToPosix 0 } ]
+            [ { min = Coord.xy 5 0, max = Coord.xy 6 2, z = 0, color = red, placedAt = Time.millisToPosix 0 }
+            , { min = Coord.xy 5 2, max = Coord.xy 6 4, z = 0, color = red, placedAt = Time.millisToPosix 0 }
+            , { min = Coord.xy 6 1, max = Coord.xy 8 2, z = 0, color = red, placedAt = Time.millisToPosix 0 }
+            ]
     in
     ( { key = key
       , time = Time.millisToPosix 0
@@ -331,43 +334,57 @@ playerHeight =
     Quantity.multiplyBy 3.5 gridUnitHeight
 
 
-movePlayer :
-    Brick
-    -> Duration
-    -> Point3d Meters World
-    -> Vector3d MetersPerSecond World
-    -> { position : Point3d Meters World, velocity : Vector3d MetersPerSecond World }
-movePlayer head elapsed position velocity =
+raycast2 :
+    Point3d Meters World
+    -> Vector3d Meters World
+    -> List Brick
+    -> Maybe { t : Float, intersection : Point3d Meters World, normal : BoxNormal }
+raycast2 position displacement bricks =
     let
-        ( Quantity minX, Quantity minY ) =
-            head.min
-
-        ( Quantity maxX, Quantity maxY ) =
-            head.max
-
         gSize : { x : Float, y : Float, z : Float }
         gSize =
             Vector3d.toMeters gridUnitSize
 
-        cast : Maybe { intersection : Point3d Meters World, normal : BoxNormal, t : Float }
-        cast =
+        playerHalfWidth =
+            Length.inMeters playerWidth / 2
+    in
+    List.filterMap
+        (\brick ->
+            let
+                ( Quantity minX, Quantity minY ) =
+                    brick.min
+
+                ( Quantity maxX, Quantity maxY ) =
+                    brick.max
+            in
             raycast
                 position
-                (Vector3d.for elapsed velocity)
+                displacement
                 (Point3d.unsafe
-                    { x = gSize.x * toFloat minX
-                    , y = gSize.y * toFloat minY
-                    , z = gSize.z * toFloat head.z
+                    { x = gSize.x * toFloat minX - playerHalfWidth
+                    , y = gSize.y * toFloat minY - playerHalfWidth
+                    , z = gSize.z * toFloat brick.z
                     }
                 )
                 (Point3d.unsafe
-                    { x = gSize.x * toFloat maxX
-                    , y = gSize.y * toFloat maxY
-                    , z = gSize.z * toFloat (head.z + 1) + Length.inMeters playerHeight
+                    { x = gSize.x * toFloat maxX + playerHalfWidth
+                    , y = gSize.y * toFloat maxY + playerHalfWidth
+                    , z = gSize.z * toFloat (brick.z + 1) + Length.inMeters playerHeight
                     }
                 )
-    in
-    case cast of
+        )
+        bricks
+        |> List.Extra.minimumBy .t
+
+
+movePlayer :
+    List Brick
+    -> Duration
+    -> Point3d Meters World
+    -> Vector3d MetersPerSecond World
+    -> { position : Point3d Meters World, velocity : Vector3d MetersPerSecond World }
+movePlayer bricks elapsed position velocity =
+    case raycast2 position (Vector3d.for elapsed velocity) bricks of
         Just { intersection, normal, t } ->
             let
                 v =
@@ -406,7 +423,7 @@ movePlayer head elapsed position velocity =
                             )
             in
             movePlayer
-                head
+                bricks
                 (Quantity.multiplyBy (1 - t) elapsed)
                 (Point3d.translateBy offset intersection)
                 velocity2
@@ -473,12 +490,46 @@ update msg model =
                                           else
                                             Vector3d.zero
                                         ]
-                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 3)
+                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 4)
 
-                                isOnGround : Bool
-                                isOnGround =
-                                    Point3d.zCoordinate normalMode.position
-                                        |> Quantity.lessThanOrEqualTo playerHeight
+                                collisionBoxes =
+                                    { min = Coord.xy -1000 -1000
+                                    , max = Coord.xy 1000 1000
+                                    , color = red
+                                    , placedAt = Time.millisToPosix 0
+                                    , z = -1
+                                    }
+                                        :: model.bricks
+
+                                canJump : Float -> Bool
+                                canJump zVelocity =
+                                    if zVelocity <= 0 then
+                                        let
+                                            cast =
+                                                raycast2
+                                                    normalMode.position
+                                                    (Vector3d.xyz
+                                                        Quantity.zero
+                                                        Quantity.zero
+                                                        (Length.millimeters -1)
+                                                    )
+                                                    collisionBoxes
+                                        in
+                                        case cast of
+                                            Just { normal } ->
+                                                True
+
+                                            --case normal of
+                                            --    ZPositive ->
+                                            --        True
+                                            --
+                                            --    _ ->
+                                            --        False
+                                            Nothing ->
+                                                False
+
+                                    else
+                                        False
 
                                 velocity : Vector3d MetersPerSecond World
                                 velocity =
@@ -487,35 +538,29 @@ update msg model =
                                             |> Vector3d.rotateAround Axis3d.z normalMode.longitude
                                             |> Vector3d.for elapsed
                                         , normalMode.velocity
-
-                                        --, Vector3d.for elapsed gravity
+                                        , Vector3d.for elapsed gravity
                                         ]
                                         |> Vector3d.unwrap
                                         |> (\v ->
                                                 { x = v.x * 0.85
                                                 , y = v.y * 0.85
                                                 , z =
-                                                    if isOnGround then
-                                                        if SeqSet.member " " normalMode.keysDown then
-                                                            1
-
-                                                        else
-                                                            0
+                                                    if SeqSet.member " " normalMode.keysDown && canJump v.z then
+                                                        0.7
 
                                                     else
-                                                        v.z * 0.99
+                                                        v.z
                                                 }
                                            )
                                         |> Vector3d.unsafe
 
                                 moved : { position : Point3d Meters World, velocity : Vector3d MetersPerSecond World }
                                 moved =
-                                    case model.bricks of
-                                        head :: _ ->
-                                            movePlayer head elapsed normalMode.position velocity
-
-                                        [] ->
-                                            Debug.todo ""
+                                    movePlayer
+                                        collisionBoxes
+                                        elapsed
+                                        normalMode.position
+                                        velocity
                             in
                             { normalMode
                                 | position = moved.position
@@ -742,12 +787,7 @@ raycast :
     -> Vector3d u c
     -> Point3d u c
     -> Point3d u c
-    ->
-        Maybe
-            { t : Float
-            , intersection : Point3d u c
-            , normal : BoxNormal
-            }
+    -> Maybe { t : Float, intersection : Point3d u c, normal : BoxNormal }
 raycast ray delta boxMin boxMax =
     let
         boxMin2 =
@@ -1544,7 +1584,7 @@ vrUpdate pose model =
 
 gravity : Vector3d MetersPerSecondSquared World
 gravity =
-    Vector3d.metersPerSecondSquared 0 0 -3
+    Vector3d.metersPerSecondSquared 0 0 -2
 
 
 mat4ToFrame3d : Mat4 -> Frame3d u c d
@@ -1725,7 +1765,7 @@ normalModeView normalMode model =
                         Length.meter
                         normalMode.position
                 , projection = Camera3d.Perspective
-                , fov = Camera3d.angle (Angle.degrees 80)
+                , fov = Camera3d.angle (Angle.degrees 70)
                 , upDirection = Direction3d.z
                 }
 
@@ -1749,7 +1789,7 @@ normalModeView normalMode model =
             Coord.toTuple normalMode.cssCanvasSize
     in
     WebGL.toHtmlWith
-        [ WebGL.clearColor 0.9 0.95 1 1 ]
+        [ WebGL.clearColor 0.9 0.95 1 1, WebGL.depth 1 ]
         [ Html.Attributes.width windowWidth
         , Html.Attributes.height windowHeight
         , Html.Attributes.style "width" (String.fromInt cssWindowWidth ++ "px")
@@ -1776,15 +1816,6 @@ normalModeView normalMode model =
             , viewMatrix = viewMatrix
             , modelTransform = Mat4.identity
             , elapsedTime = Duration.from model.startTime model.time |> Duration.inMilliseconds
-            }
-        , WebGL.entity
-            vertexShader
-            fragmentShader
-            floorAxes
-            { perspective = perspective
-            , viewMatrix = viewMatrix
-            , modelTransform = Mat4.identity
-            , cameraPosition = Point3d.toVec3 normalMode.position
             }
         ]
 
