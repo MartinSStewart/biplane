@@ -24,6 +24,7 @@ import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrInput, XrRenderError(..))
 import Effect.WebGL.Settings exposing (Setting)
 import Effect.WebGL.Texture exposing (Texture)
+import Env
 import Font
 import Frame3d exposing (Frame3d)
 import Geometry.Interop.LinearAlgebra.Point2d as Point2d
@@ -46,12 +47,14 @@ import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Ports
 import Quantity exposing (Product, Quantity(..), Rate)
+import SeqDict
 import SeqSet exposing (SeqSet)
 import Speed exposing (MetersPerSecond)
 import TriangularMesh
 import Types exposing (..)
 import Unsafe
 import Url
+import User exposing (World)
 import Vector2d exposing (Vector2d)
 import Vector3d exposing (Vector3d)
 import WebGL.Matrices
@@ -270,6 +273,8 @@ init url key =
       , consoleLogMesh = WebGL.indexedTriangles [] []
       , lastPlacedBrick = Nothing
       , undoHeld = Nothing
+      , users = SeqDict.empty
+      , userId = Nothing
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -457,122 +462,116 @@ update msg model =
 
         AnimationFrame time ->
             let
+                elapsed : Duration
                 elapsed =
                     Duration.from model.time time
             in
-            ( { model
-                | time = time
-                , isInVr =
-                    case model.isInVr of
-                        IsInNormalMode normalMode ->
-                            let
-                                acceleration : Vector3d MetersPerSecondSquared World
-                                acceleration =
-                                    Vector3d.sum
-                                        [ if SeqSet.member "w" normalMode.keysDown then
-                                            Vector3d.metersPerSecondSquared 1 0 0
+            updateNormalMode
+                (\normalMode ->
+                    let
+                        acceleration : Vector3d MetersPerSecondSquared World
+                        acceleration =
+                            Vector3d.sum
+                                [ if SeqSet.member "w" normalMode.keysDown then
+                                    Vector3d.metersPerSecondSquared 1 0 0
 
-                                          else
-                                            Vector3d.zero
-                                        , if SeqSet.member "s" normalMode.keysDown then
-                                            Vector3d.metersPerSecondSquared -1 0 0
+                                  else
+                                    Vector3d.zero
+                                , if SeqSet.member "s" normalMode.keysDown then
+                                    Vector3d.metersPerSecondSquared -1 0 0
 
-                                          else
-                                            Vector3d.zero
-                                        , if SeqSet.member "a" normalMode.keysDown then
-                                            Vector3d.metersPerSecondSquared 0 1 0
+                                  else
+                                    Vector3d.zero
+                                , if SeqSet.member "a" normalMode.keysDown then
+                                    Vector3d.metersPerSecondSquared 0 1 0
 
-                                          else
-                                            Vector3d.zero
-                                        , if SeqSet.member "d" normalMode.keysDown then
-                                            Vector3d.metersPerSecondSquared 0 -1 0
+                                  else
+                                    Vector3d.zero
+                                , if SeqSet.member "d" normalMode.keysDown then
+                                    Vector3d.metersPerSecondSquared 0 -1 0
 
-                                          else
-                                            Vector3d.zero
-                                        ]
-                                        |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 4)
+                                  else
+                                    Vector3d.zero
+                                ]
+                                |> Vector3d.scaleTo (Acceleration.metersPerSecondSquared 4)
 
-                                collisionBoxes =
-                                    { min = Coord.xy -1000 -1000
-                                    , max = Coord.xy 1000 1000
-                                    , color = red
-                                    , placedAt = Time.millisToPosix 0
-                                    , z = -1
-                                    }
-                                        :: model.bricks
+                        collisionBoxes =
+                            { min = Coord.xy -1000 -1000
+                            , max = Coord.xy 1000 1000
+                            , color = red
+                            , placedAt = Time.millisToPosix 0
+                            , z = -1
+                            }
+                                :: model.bricks
 
-                                canJump : Float -> Bool
-                                canJump zVelocity =
-                                    if zVelocity <= 0 then
-                                        let
-                                            cast =
-                                                raycast2
-                                                    normalMode.position
-                                                    (Vector3d.xyz
-                                                        Quantity.zero
-                                                        Quantity.zero
-                                                        (Length.millimeters -1)
-                                                    )
-                                                    collisionBoxes
-                                        in
-                                        case cast of
-                                            Just { normal } ->
+                        canJump : Float -> Bool
+                        canJump zVelocity =
+                            if zVelocity <= 0 then
+                                let
+                                    cast =
+                                        raycast2
+                                            normalMode.position
+                                            (Vector3d.xyz
+                                                Quantity.zero
+                                                Quantity.zero
+                                                (Length.millimeters -1)
+                                            )
+                                            collisionBoxes
+                                in
+                                case cast of
+                                    Just { normal } ->
+                                        case normal of
+                                            ZPositive ->
                                                 True
 
-                                            --case normal of
-                                            --    ZPositive ->
-                                            --        True
-                                            --
-                                            --    _ ->
-                                            --        False
-                                            Nothing ->
+                                            _ ->
                                                 False
 
-                                    else
+                                    Nothing ->
                                         False
 
-                                velocity : Vector3d MetersPerSecond World
-                                velocity =
-                                    Vector3d.sum
-                                        [ acceleration
-                                            |> Vector3d.rotateAround Axis3d.z normalMode.longitude
-                                            |> Vector3d.for elapsed
-                                        , normalMode.velocity
-                                        , Vector3d.for elapsed gravity
-                                        ]
-                                        |> Vector3d.unwrap
-                                        |> (\v ->
-                                                { x = v.x * 0.85
-                                                , y = v.y * 0.85
-                                                , z =
-                                                    if SeqSet.member " " normalMode.keysDown && canJump v.z then
-                                                        0.7
+                            else
+                                False
 
-                                                    else
-                                                        v.z
-                                                }
-                                           )
-                                        |> Vector3d.unsafe
+                        velocity : Vector3d MetersPerSecond World
+                        velocity =
+                            Vector3d.sum
+                                [ acceleration
+                                    |> Vector3d.rotateAround Axis3d.z normalMode.longitude
+                                    |> Vector3d.for elapsed
+                                , normalMode.velocity
+                                , Vector3d.for elapsed gravity
+                                ]
+                                |> Vector3d.unwrap
+                                |> (\v ->
+                                        { x = v.x * 0.85
+                                        , y = v.y * 0.85
+                                        , z =
+                                            if SeqSet.member " " normalMode.keysDown && canJump v.z then
+                                                0.7
 
-                                moved : { position : Point3d Meters World, velocity : Vector3d MetersPerSecond World }
-                                moved =
-                                    movePlayer
-                                        collisionBoxes
-                                        elapsed
-                                        normalMode.position
-                                        velocity
-                            in
-                            { normalMode
-                                | position = moved.position
-                                , velocity = moved.velocity
-                            }
-                                |> IsInNormalMode
+                                            else
+                                                v.z
+                                        }
+                                   )
+                                |> Vector3d.unsafe
 
-                        _ ->
-                            model.isInVr
-              }
-            , Command.none
-            )
+                        moved : { position : Point3d Meters World, velocity : Vector3d MetersPerSecond World }
+                        moved =
+                            movePlayer
+                                collisionBoxes
+                                elapsed
+                                normalMode.position
+                                velocity
+                    in
+                    ( { normalMode
+                        | position = moved.position
+                        , velocity = moved.velocity
+                      }
+                    , NewPositionRequest moved.position moved.velocity |> Effect.Lamdera.sendToBackend
+                    )
+                )
+                { model | time = time }
 
         PressedEnterVr ->
             if model.soundsLoaded then
@@ -580,6 +579,11 @@ update msg model =
                 , Command.batch
                     [ WebGL.requestXrStart [ WebGL.clearColor 0.5 0.6 1 1, WebGL.depth 1 ] |> Task.attempt StartedXr
                     , Ports.playSound "pop"
+                    , if Env.isProduction then
+                        Command.none
+
+                      else
+                        Ports.listenToConsole
                     ]
                 )
 
@@ -1544,6 +1548,8 @@ vrUpdate pose model =
 
                     else
                         Nothing
+      , users = model.users
+      , userId = model.userId
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
@@ -1708,6 +1714,26 @@ updateFromBackend msg model =
         NoOpToFrontend ->
             ( model, Command.none )
 
+        UserPositionChanged userId position velocity ->
+            ( { model
+                | users =
+                    SeqDict.updateIfExists
+                        userId
+                        (\user -> { user | position = position, velocity = velocity })
+                        model.users
+              }
+            , Command.none
+            )
+
+        ConnectedResponse userId ->
+            ( { model | userId = Just userId }, Command.none )
+
+        UserConnected userId ->
+            ( { model | users = SeqDict.insert userId User.init model.users }, Command.none )
+
+        UserDisconnected userId ->
+            ( { model | users = SeqDict.remove userId model.users }, Command.none )
+
 
 view : FrontendModel -> Browser.Document FrontendMsg
 view model =
@@ -1795,7 +1821,7 @@ normalModeView normalMode model =
         , Html.Attributes.style "width" (String.fromInt cssWindowWidth ++ "px")
         , Html.Attributes.style "height" (String.fromInt cssWindowHeight ++ "px")
         ]
-        [ WebGL.entity
+        ([ WebGL.entity
             vertexShader
             fragmentShader
             square2
@@ -1804,7 +1830,7 @@ normalModeView normalMode model =
             , modelTransform = Mat4.identity
             , cameraPosition = Point3d.toVec3 normalMode.position
             }
-        , WebGL.entityWith
+         , WebGL.entityWith
             [ DepthTest.default
             , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
             , blend
@@ -1817,7 +1843,26 @@ normalModeView normalMode model =
             , modelTransform = Mat4.identity
             , elapsedTime = Duration.from model.startTime model.time |> Duration.inMilliseconds
             }
-        ]
+         ]
+            ++ List.filterMap
+                (\( userId, user ) ->
+                    if Just userId == model.userId then
+                        Nothing
+
+                    else
+                        WebGL.entity
+                            vertexShader
+                            fragmentShader
+                            sphere2
+                            { perspective = perspective
+                            , viewMatrix = viewMatrix
+                            , modelTransform = Mat4.makeTranslate (Point3d.toVec3 user.position)
+                            , cameraPosition = Point3d.toVec3 normalMode.position
+                            }
+                            |> Just
+                )
+                (SeqDict.toList model.users)
+        )
 
 
 zNormal =
@@ -2039,12 +2084,12 @@ floorAxes =
 
 sphere1 : Mesh Vertex
 sphere1 =
-    sphere 0 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 0.01 8
+    sphere 0.1 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 0.01 8
 
 
 sphere2 : Mesh Vertex
 sphere2 =
-    sphere 0 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 1.3 8
+    sphere 0.1 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 0) 0.01 8
 
 
 sphere : Float -> Vec4 -> Point3d u c -> Float -> Int -> Mesh Vertex

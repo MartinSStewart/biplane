@@ -3,14 +3,15 @@ module Types exposing (..)
 import Angle exposing (Angle)
 import Browser exposing (UrlRequest)
 import Coord exposing (Coord)
-import Direction2d exposing (Direction2d)
-import Direction3d exposing (Direction3d)
 import Duration exposing (Seconds)
 import Effect.Browser.Navigation
+import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Effect.WebGL
 import Effect.WebGL.Texture exposing (Texture)
+import Id exposing (Id, UserId)
 import Length exposing (Meters)
+import List.Nonempty exposing (Nonempty)
 import Math.Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 exposing (Vec3)
@@ -19,9 +20,11 @@ import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Point3d exposing (Point3d)
 import Quantity exposing (Rate, Unitless)
+import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Speed exposing (MetersPerSecond)
 import Url exposing (Url)
+import User exposing (User, World)
 import Vector3d exposing (Vector3d)
 
 
@@ -47,6 +50,8 @@ type alias FrontendModel =
     , consoleLogMesh : Effect.WebGL.Mesh LabelVertex
     , lastPlacedBrick : Maybe Brick
     , undoHeld : Maybe Time.Posix
+    , users : SeqDict (Id UserId) User
+    , userId : Maybe (Id UserId)
     }
 
 
@@ -102,10 +107,6 @@ type PlaneLocal
     = PlaneLocal Never
 
 
-type World
-    = World Never
-
-
 type alias Bullet =
     { position : Point3d Meters World
     , velocity : Vector3d (Rate Meters Seconds) World
@@ -141,7 +142,10 @@ type alias LabelVertex =
 
 
 type alias BackendModel =
-    { message : String
+    { users : SeqDict (Id UserId) User
+    , sessions : SeqDict SessionId (Id UserId)
+    , connections : SeqDict SessionId (Nonempty ClientId)
+    , userIdCounter : Int
     }
 
 
@@ -171,11 +175,18 @@ type FrontendMsg
 
 type ToBackend
     = NoOpToBackend
+    | NewPositionRequest (Point3d Meters World) (Vector3d MetersPerSecond World)
 
 
 type BackendMsg
     = NoOpBackendMsg
+    | Connected SessionId ClientId
+    | Disconnected SessionId ClientId
 
 
 type ToFrontend
     = NoOpToFrontend
+    | UserPositionChanged (Id UserId) (Point3d Meters World) (Vector3d MetersPerSecond World)
+    | ConnectedResponse (Id UserId)
+    | UserConnected (Id UserId)
+    | UserDisconnected (Id UserId)

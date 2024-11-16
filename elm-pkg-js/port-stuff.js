@@ -10,11 +10,18 @@ async function loadAudio(url, context, sounds) {
 }
 
 exports.init = async function(app) {
-    console.stdlog = console.log.bind(console);
-    console.log = function(){
-        setTimeout(() => app.ports.console_log_from_js.send(arguments[0]), 1);
-        console.stdlog.apply(console, arguments);
-    }
+    let listeningToConsole = false;
+    app.ports.listen_to_console.subscribe((a) => {
+        if (!listeningToConsole) {
+            listeningToConsole = true;
+            console.stdlog = console.log.bind(console);
+            console.log = function(){
+                setTimeout(() => app.ports.console_log_from_js.send(arguments[0]), 1);
+                console.stdlog.apply(console, arguments);
+            }
+        }
+    });
+
 
 
     let context = null;
