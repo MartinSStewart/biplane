@@ -37,7 +37,7 @@ import Json.Decode
 import Lamdera
 import Length exposing (Meters)
 import List.Extra
-import List.Nonempty exposing (Nonempty)
+import List.Nonempty exposing (Nonempty(..))
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
 import Math.Vector3 as Vec3 exposing (Vec3)
@@ -55,7 +55,6 @@ import Types exposing (..)
 import Unsafe
 import Url
 import User exposing (World)
-import Vector2d exposing (Vector2d)
 import Vector3d exposing (Vector3d)
 import WebGL.Matrices
 import WebGL.Settings.Blend as Blend
@@ -87,14 +86,14 @@ subscriptions model =
                     , Effect.Browser.Events.onResize (\width height -> WindowResized (Coord.xy width height))
                     , Effect.Browser.Events.onKeyDown (keyDecoder KeyDown)
                     , Effect.Browser.Events.onKeyUp (keyDecoder KeyUp)
-                    , Effect.Browser.Events.onAnimationFrame AnimationFrame
                     , Effect.Browser.Events.onMouseMove (mouseDecoder MouseMoved)
                     , Effect.Browser.Events.onMouseDown (mouseDecoder (\_ _ -> MouseDown))
                     , Ports.pointerLockChange PointerLockChanged
                     ]
 
             IsInVr ->
-                Effect.Browser.Events.onAnimationFrame AnimationFrame
+                Subscription.none
+        , Effect.Browser.Events.onAnimationFrame AnimationFrame
         , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
         , Ports.soundsLoaded SoundsLoaded
         , Ports.gotConsoleLog GotConsoleLog
@@ -137,8 +136,9 @@ brickMesh : Time.Posix -> Brick -> List BrickVertex
 brickMesh startTime brick =
     let
         placedAt =
-            Duration.from startTime brick.placedAt |> Duration.inMilliseconds
+            0
 
+        --Duration.from startTime brick.placedAt |> Duration.inMilliseconds
         color =
             brick.color
 
@@ -238,20 +238,13 @@ brickMesh startTime brick =
     ]
 
 
+red : Vec4
 red =
     Vec4.vec4 0.8 0 0 1
 
 
 init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 init url key =
-    let
-        bricks : List Brick
-        bricks =
-            [ { min = Coord.xy 5 0, max = Coord.xy 6 2, z = 0, color = red, placedAt = Time.millisToPosix 0 }
-            , { min = Coord.xy 5 2, max = Coord.xy 6 4, z = 0, color = red, placedAt = Time.millisToPosix 0 }
-            , { min = Coord.xy 6 1, max = Coord.xy 8 2, z = 0, color = red, placedAt = Time.millisToPosix 0 }
-            ]
-    in
     ( { key = key
       , time = Time.millisToPosix 0
       , lastVrUpdate = Time.millisToPosix 0
@@ -263,8 +256,8 @@ init url key =
       , lagWarning = Time.millisToPosix 0
       , fontTexture = Loading
       , brickSize = Coord.xy 1 2
-      , bricks = bricks
-      , brickMesh = List.concatMap (brickMesh (Time.millisToPosix 0)) bricks |> quadsToMesh
+      , bricks = []
+      , brickMesh = WebGL.indexedTriangles [] []
       , lastUsedInput = WebGL.LeftHand
       , previousLeftInput = noInput
       , previousRightInput = noInput
@@ -331,7 +324,7 @@ bayerTexture =
 
 playerWidth : Quantity Float Meters
 playerWidth =
-    Quantity.multiplyBy 0.8 gridUnitWidth
+    Quantity.multiplyBy 1.6 gridUnitWidth
 
 
 playerHeight : Quantity Float Meters
@@ -1584,6 +1577,15 @@ vrUpdate pose model =
 
             Nothing ->
                 Command.none
+        , case maybeBrick of
+            PlaceMany bricks ->
+                Effect.Lamdera.sendToBackend (PlaceBricksRequest bricks)
+
+            PlaceSingle brick ->
+                Nonempty brick [] |> PlaceBricksRequest |> Effect.Lamdera.sendToBackend
+
+            PlaceNone ->
+                Command.none
         ]
     )
 
@@ -1725,14 +1727,41 @@ updateFromBackend msg model =
             , Command.none
             )
 
-        ConnectedResponse userId ->
-            ( { model | userId = Just userId }, Command.none )
+        ConnectedResponse userId bricks ->
+            let
+                _ =
+                    Debug.log "bricks count" bricks
+            in
+            ( { model
+                | userId = Just userId
+                , bricks = bricks
+                , brickMesh =
+                    List.foldr (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks
+                        |> quadsToMesh
+              }
+            , Command.none
+            )
 
         UserConnected userId ->
             ( { model | users = SeqDict.insert userId User.init model.users }, Command.none )
 
         UserDisconnected userId ->
             ( { model | users = SeqDict.remove userId model.users }, Command.none )
+
+        BricksPlaced nonempty ->
+            let
+                bricks : List Brick
+                bricks =
+                    List.Nonempty.toList nonempty ++ model.bricks
+            in
+            ( { model
+                | bricks = bricks
+                , brickMesh =
+                    List.foldr (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks
+                        |> quadsToMesh
+              }
+            , Command.none
+            )
 
 
 view : FrontendModel -> Browser.Document FrontendMsg
@@ -1815,7 +1844,7 @@ normalModeView normalMode model =
             Coord.toTuple normalMode.cssCanvasSize
     in
     WebGL.toHtmlWith
-        [ WebGL.clearColor 0.9 0.95 1 1, WebGL.depth 1 ]
+        [ WebGL.clearColor 0.9 0.95 1 1, WebGL.alpha False, WebGL.depth 1 ]
         [ Html.Attributes.width windowWidth
         , Html.Attributes.height windowHeight
         , Html.Attributes.style "width" (String.fromInt cssWindowWidth ++ "px")
@@ -1833,7 +1862,8 @@ normalModeView normalMode model =
          , WebGL.entityWith
             [ DepthTest.default
             , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
-            , blend
+
+            --, blend
             ]
             brickVertexShader
             brickFragmentShader
@@ -1841,7 +1871,7 @@ normalModeView normalMode model =
             { perspective = perspective
             , viewMatrix = viewMatrix
             , modelTransform = Mat4.identity
-            , elapsedTime = Duration.from model.startTime model.time |> Duration.inMilliseconds
+            , elapsedTime = 1000 --Duration.from model.startTime model.time |> Duration.inMilliseconds
             }
          ]
             ++ List.filterMap
@@ -1851,13 +1881,12 @@ normalModeView normalMode model =
 
                     else
                         WebGL.entity
-                            vertexShader
-                            fragmentShader
+                            flatVertexShader
+                            flatFragmentShader
                             sphere2
                             { perspective = perspective
                             , viewMatrix = viewMatrix
-                            , modelTransform = Mat4.makeTranslate (Point3d.toVec3 user.position)
-                            , cameraPosition = Point3d.toVec3 normalMode.position
+                            , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 user.position)
                             }
                             |> Just
                 )
@@ -1876,13 +1905,13 @@ clearScreen =
         flatVertexShader
         flatFragmentShader
         (quadsToMesh
-            [ { position = Vec2.vec2 -1 -1 }
-            , { position = Vec2.vec2 1 -1 }
-            , { position = Vec2.vec2 1 1 }
-            , { position = Vec2.vec2 -1 1 }
+            [ { position = Vec3.vec3 -1 -1 1, color = Vec4.vec4 0 0 0 1 }
+            , { position = Vec3.vec3 1 -1 1, color = Vec4.vec4 0 0 0 1 }
+            , { position = Vec3.vec3 1 1 1, color = Vec4.vec4 0 0 0 1 }
+            , { position = Vec3.vec3 -1 1 1, color = Vec4.vec4 0 0 0 1 }
             ]
         )
-        {}
+        { viewMatrix = Mat4.identity, modelMatrix = Mat4.identity, perspective = Mat4.identity }
 
 
 entities : FrontendModel -> { time : Time.Posix, xrView : WebGL.XrView, inputs : List WebGL.XrInput } -> List Entity
@@ -2087,9 +2116,9 @@ sphere1 =
     sphere 0.1 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 -1.2) 0.01 8
 
 
-sphere2 : Mesh Vertex
+sphere2 : Mesh FlatVertex
 sphere2 =
-    sphere 0.1 (Vec4.vec4 1 0 0 1) (Point3d.meters 0 0 0) 0.01 8
+    sphereFlatShading (Vec4.vec4 0.05 0.05 0.05 1) (Point3d.meters 0 0 0) (Length.inMeters playerWidth / 2) 8
 
 
 sphere : Float -> Vec4 -> Point3d u c -> Float -> Int -> Mesh Vertex
@@ -2125,6 +2154,43 @@ sphere shininess color position radius detail =
                     , normal = Vector3d.toVec3 point
                     , color = color
                     , shininess = shininess
+                    }
+                )
+    in
+    WebGL.indexedTriangles (TriangularMesh.vertices mesh |> Array.toList) (TriangularMesh.faceIndices mesh)
+
+
+sphereFlatShading : Vec4 -> Point3d u c -> Float -> Int -> Mesh FlatVertex
+sphereFlatShading color position radius detail =
+    let
+        uDetail =
+            detail * 2
+
+        vDetail =
+            detail
+
+        mesh =
+            TriangularMesh.indexedBall
+                uDetail
+                vDetail
+                (\u v ->
+                    let
+                        longitude =
+                            2 * pi * toFloat u / toFloat uDetail
+
+                        latitude =
+                            pi * toFloat v / toFloat vDetail
+
+                        point : Vector3d u c
+                        point =
+                            Vector3d.unsafe
+                                { x = sin longitude * sin latitude
+                                , y = cos longitude * sin latitude
+                                , z = cos latitude
+                                }
+                    in
+                    { position = Point3d.translateBy (Vector3d.scaleBy radius point) position |> Point3d.toVec3
+                    , color = color
                     }
                 )
     in
@@ -2294,24 +2360,33 @@ void main () {
     |]
 
 
-flatVertexShader : Shader { position : Vec2 } u {}
+flatVertexShader : Shader FlatVertex { u | perspective : Mat4, viewMatrix : Mat4, modelMatrix : Mat4 } { vColor : Vec4 }
 flatVertexShader =
     [glsl|
-attribute vec2 position;
+attribute vec3 position;
+attribute vec4 color;
+
+uniform mat4 viewMatrix;
+uniform mat4 perspective;
+uniform mat4 modelMatrix;
+
+varying vec4 vColor;
 
 void main(void) {
-    gl_Position = vec4(position, 1.0, 1.0);
+    gl_Position = perspective * viewMatrix * modelMatrix * vec4(position, 1.0);
+    vColor = color;
 }
     |]
 
 
-flatFragmentShader : Shader {} u {}
+flatFragmentShader : Shader {} u { vColor : Vec4 }
 flatFragmentShader =
     [glsl|
 precision mediump float;
+varying vec4 vColor;
 
 void main(void) {
-    gl_FragColor = vec4(0.5, 0.6, 1.0, 1.0);
+    gl_FragColor = vColor;
 }
     |]
 

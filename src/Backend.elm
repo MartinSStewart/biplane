@@ -50,6 +50,7 @@ init =
       , sessions = SeqDict.empty
       , connections = SeqDict.empty
       , userIdCounter = 0
+      , bricks = []
       }
     , Command.none
     )
@@ -63,9 +64,6 @@ update msg model =
 
         Connected sessionId clientId ->
             let
-                _ =
-                    Debug.log "a" ()
-
                 model2 : BackendModel
                 model2 =
                     { model
@@ -87,7 +85,7 @@ update msg model =
                 Just userId ->
                     ( model2
                     , Command.batch
-                        [ ConnectedResponse userId |> Effect.Lamdera.sendToFrontend clientId
+                        [ ConnectedResponse userId model.bricks |> Effect.Lamdera.sendToFrontend clientId
                         , Effect.Lamdera.broadcast (UserConnected userId)
                         ]
                     )
@@ -104,7 +102,7 @@ update msg model =
                         , sessions = SeqDict.insert sessionId userId model.sessions
                       }
                     , Command.batch
-                        [ ConnectedResponse userId |> Effect.Lamdera.sendToFrontend clientId
+                        [ ConnectedResponse userId model.bricks |> Effect.Lamdera.sendToFrontend clientId
                         , Effect.Lamdera.broadcast (UserConnected userId)
                         ]
                     )
@@ -158,3 +156,25 @@ updateFromFrontend sessionId clientId msg model =
 
                 Nothing ->
                     ( model, Command.none )
+
+        PlaceBricksRequest bricks ->
+            let
+                _ =
+                    Debug.log "bricks" bricks
+            in
+            ( { model | bricks = List.Nonempty.toList bricks ++ model.bricks }
+            , List.concatMap
+                (\clientIds ->
+                    List.map
+                        (\clientId2 ->
+                            if clientId == clientId2 then
+                                Command.none
+
+                            else
+                                Effect.Lamdera.sendToFrontend clientId2 (BricksPlaced bricks)
+                        )
+                        (List.Nonempty.toList clientIds)
+                )
+                (SeqDict.values model.connections)
+                |> Command.batch
+            )

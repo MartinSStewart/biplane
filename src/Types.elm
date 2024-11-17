@@ -128,6 +128,12 @@ type alias Vertex =
     }
 
 
+type alias FlatVertex =
+    { position : Vec3
+    , color : Vec4
+    }
+
+
 type alias BrickVertex =
     { position : Vec3
     , color : Vec4
@@ -146,6 +152,7 @@ type alias BackendModel =
     , sessions : SeqDict SessionId (Id UserId)
     , connections : SeqDict SessionId (Nonempty ClientId)
     , userIdCounter : Int
+    , bricks : List Brick
     }
 
 
@@ -176,6 +183,7 @@ type FrontendMsg
 type ToBackend
     = NoOpToBackend
     | NewPositionRequest (Point3d Meters World) (Vector3d MetersPerSecond World)
+    | PlaceBricksRequest (Nonempty Brick)
 
 
 type BackendMsg
@@ -187,6 +195,7 @@ type BackendMsg
 type ToFrontend
     = NoOpToFrontend
     | UserPositionChanged (Id UserId) (Point3d Meters World) (Vector3d MetersPerSecond World)
-    | ConnectedResponse (Id UserId)
+    | ConnectedResponse (Id UserId) (List Brick)
     | UserConnected (Id UserId)
     | UserDisconnected (Id UserId)
+    | BricksPlaced (Nonempty Brick)
