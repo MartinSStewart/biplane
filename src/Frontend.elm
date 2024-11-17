@@ -1589,33 +1589,34 @@ vrUpdate pose model =
 
             Nothing ->
                 Command.none
-        , if not model.sentDataLastFrame || maybeBrick /= PlaceNone then
-            VrUpdateRequest
-                { leftHand = leftInput.position
-                , rightHand = rightInput.position
-                , head = mat4ToPoint3d pose.transform
-                }
-                (case maybeBrick of
-                    PlaceMany bricks ->
-                        List.Nonempty.toList bricks
+        , case ( model.sentDataLastFrame, pressedUndoAt, maybeBrick ) of
+            ( True, Nothing, PlaceNone ) ->
+                Command.none
 
-                    PlaceSingle brick ->
-                        [ brick ]
+            _ ->
+                VrUpdateRequest
+                    { leftHand = leftInput.position
+                    , rightHand = rightInput.position
+                    , head = mat4ToPoint3d pose.transform
+                    }
+                    (case maybeBrick of
+                        PlaceMany bricks ->
+                            List.Nonempty.toList bricks
 
-                    PlaceNone ->
-                        []
-                )
-                (case pressedUndoAt of
-                    Just _ ->
-                        True
+                        PlaceSingle brick ->
+                            [ brick ]
 
-                    Nothing ->
-                        False
-                )
-                |> Effect.Lamdera.sendToBackend
+                        PlaceNone ->
+                            []
+                    )
+                    (case pressedUndoAt of
+                        Just _ ->
+                            True
 
-          else
-            Command.none
+                        Nothing ->
+                            False
+                    )
+                    |> Effect.Lamdera.sendToBackend
         ]
     )
 
