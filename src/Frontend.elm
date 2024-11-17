@@ -2098,7 +2098,7 @@ entities model =
                     _ ->
                         []
                )
-            ++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 50) then
+            ++ (if Duration.from model.lagWarning time |> Quantity.lessThan (Duration.milliseconds 10) then
                     [ WebGL.entityWith
                         []
                         vertexShader
