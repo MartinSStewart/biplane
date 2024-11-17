@@ -185,7 +185,7 @@ type FrontendMsg
 type ToBackend
     = NoOpToBackend
     | NewPositionRequest (Point3d Meters World) (Vector3d MetersPerSecond World)
-    | VrUpdateRequest VrUserData (List Brick)
+    | VrUpdateRequest VrUserData (List Brick) Bool
     | ResetRequest
 
 
@@ -201,5 +201,5 @@ type ToFrontend
     | ConnectedResponse (Id UserId) { bricks : List Brick, users : SeqDict (Id UserId) User }
     | UserConnected (Id UserId)
     | UserDisconnected (Id UserId)
-    | VrPositionChanged (Id UserId) VrUserData (List Brick)
+    | VrPositionChanged (Id UserId) VrUserData (List Brick) Bool
     | ResetBroadcast

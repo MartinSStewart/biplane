@@ -1605,6 +1605,13 @@ vrUpdate pose model =
                     PlaceNone ->
                         []
                 )
+                (case pressedUndoAt of
+                    Just _ ->
+                        True
+
+                    Nothing ->
+                        False
+                )
                 |> Effect.Lamdera.sendToBackend
 
           else
@@ -1768,16 +1775,24 @@ updateFromBackend msg model =
         UserDisconnected userId ->
             ( { model | users = SeqDict.remove userId model.users }, Command.none )
 
-        VrPositionChanged userId data newBricks ->
+        VrPositionChanged userId data newBricks undoLastBrick ->
             let
                 bricks : List Brick
                 bricks =
                     List.map (\brick -> { brick | placedAt = model.time }) newBricks ++ model.bricks
+
+                bricks2 : List Brick
+                bricks2 =
+                    if undoLastBrick then
+                        List.drop 1 bricks
+
+                    else
+                        bricks
             in
             ( { model
-                | bricks = bricks
+                | bricks = bricks2
                 , brickMesh =
-                    List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] bricks
+                    List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] bricks2
                         |> quadsToMesh
                 , users = SeqDict.insert userId (VrUser data) model.users
               }
@@ -2210,12 +2225,12 @@ sphere2 =
 
 handSphere : Mesh FlatVertex
 handSphere =
-    sphereFlatShading (Vec4.vec4 0.95 0.95 0.95 1) (Point3d.meters 0 0 0) 0.05 8
+    sphereFlatShading (Vec4.vec4 0.85 0.85 0.85 1) (Point3d.meters 0 0 0) 0.05 8
 
 
 headSphere : Mesh FlatVertex
 headSphere =
-    sphereFlatShading (Vec4.vec4 0.95 0.95 0.95 1) (Point3d.meters 0 0 0) 0.1 8
+    sphereFlatShading (Vec4.vec4 0.85 0.85 0.85 1) (Point3d.meters 0 0 0) 0.1 8
 
 
 sphere : Float -> Vec4 -> Point3d u c -> Float -> Int -> Mesh Vertex

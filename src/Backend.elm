@@ -110,21 +110,26 @@ update msg model =
                     )
 
         Disconnected sessionId clientId ->
-            ( { model
-                | connections =
-                    SeqDict.update
-                        sessionId
-                        (Maybe.andThen
-                            (\value ->
-                                List.Nonempty.toList value
-                                    |> List.Extra.remove clientId
-                                    |> List.Nonempty.fromList
-                            )
-                        )
-                        model.connections
-              }
-            , Command.none
-            )
+            case SeqDict.get sessionId model.sessions of
+                Just userId ->
+                    ( { model
+                        | connections =
+                            SeqDict.update
+                                sessionId
+                                (Maybe.andThen
+                                    (\value ->
+                                        List.Nonempty.toList value
+                                            |> List.Extra.remove clientId
+                                            |> List.Nonempty.fromList
+                                    )
+                                )
+                                model.connections
+                      }
+                    , Effect.Lamdera.broadcast (UserDisconnected userId)
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 updateFromFrontend :
@@ -154,29 +159,19 @@ updateFromFrontend sessionId clientId msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VrUpdateRequest data newBricks ->
+        VrUpdateRequest data newBricks undoLast ->
             case SeqDict.get sessionId model.sessions of
                 Just userId ->
                     ( { model
-                        | bricks = newBricks ++ model.bricks
+                        | bricks =
+                            if undoLast then
+                                newBricks ++ model.bricks |> List.drop 1
+
+                            else
+                                newBricks ++ model.bricks
                         , users = SeqDict.insert userId (VrUser data) model.users
                       }
-                    , List.concatMap
-                        (\clientIds ->
-                            List.map
-                                (\clientId2 ->
-                                    if clientId == clientId2 then
-                                        Command.none
-
-                                    else
-                                        Effect.Lamdera.sendToFrontend
-                                            clientId2
-                                            (VrPositionChanged userId data newBricks)
-                                )
-                                (List.Nonempty.toList clientIds)
-                        )
-                        (SeqDict.values model.connections)
-                        |> Command.batch
+                    , broadcastToOthers clientId (VrPositionChanged userId data newBricks undoLast) model
                     )
 
                 Nothing ->
@@ -184,3 +179,21 @@ updateFromFrontend sessionId clientId msg model =
 
         ResetRequest ->
             ( { model | bricks = [] }, Effect.Lamdera.broadcast ResetBroadcast )
+
+
+broadcastToOthers : ClientId -> ToFrontend -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
+broadcastToOthers clientId toFrontend model =
+    List.concatMap
+        (\clientIds ->
+            List.map
+                (\clientId2 ->
+                    if clientId == clientId2 then
+                        Command.none
+
+                    else
+                        Effect.Lamdera.sendToFrontend clientId2 toFrontend
+                )
+                (List.Nonempty.toList clientIds)
+        )
+        (SeqDict.values model.connections)
+        |> Command.batch
