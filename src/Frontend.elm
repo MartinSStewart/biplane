@@ -9,6 +9,7 @@ import BayerMatrix
 import Browser exposing (UrlRequest(..))
 import Bytes.Encode
 import Camera3d
+import Color exposing (Color)
 import Coord exposing (Coord)
 import Dict
 import Direction3d exposing (Direction3d)
@@ -132,15 +133,16 @@ gridZRatio =
     Quantity.ratio gridUnitHeight (Vector3d.xComponent gridUnitSize)
 
 
-brickMesh : Time.Posix -> Brick -> List BrickVertex
-brickMesh startTime brick =
+brickMesh : Time.Posix -> Float -> Brick -> List BrickVertex
+brickMesh startTime opacity brick =
     let
+        placedAt : Float
         placedAt =
             0
 
-        --Duration.from startTime brick.placedAt |> Duration.inMilliseconds
+        color : Vec4
         color =
-            brick.color
+            Color.toVec4 brick.color opacity
 
         ( Quantity minX, Quantity minY ) =
             brick.min
@@ -238,9 +240,9 @@ brickMesh startTime brick =
     ]
 
 
-red : Vec4
+red : Color
 red =
-    Vec4.vec4 0.8 0 0 1
+    Color.rgb255 200 0 0
 
 
 init : Url.Url -> Effect.Browser.Navigation.Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -1059,7 +1061,7 @@ textMesh position text =
         |> (\( a, _, _ ) -> quadsToMesh a)
 
 
-pointToBrick : Time.Posix -> Point3d Meters World -> Coord GridUnit -> Vec4 -> List Brick -> Brick
+pointToBrick : Time.Posix -> Point3d Meters World -> Coord GridUnit -> Color -> List Brick -> Brick
 pointToBrick time point brickSize color existingBricks =
     let
         point2 : { x : Float, y : Float, z : Float }
@@ -1303,7 +1305,7 @@ placeAdjacentBricksHelper time stepCount newBricks existingBricks existingBricks
 
 
 green =
-    Vec4.vec4 0 1 0 1
+    Color.rgb255 0 255 0
 
 
 brickAtPoint : Coord GridUnit -> Brick -> Bool
@@ -1465,7 +1467,7 @@ vrUpdate pose model =
       , bricks = bricks3
       , brickMesh =
             if maybeBrick /= PlaceNone || pressedUndoAt /= Nothing then
-                List.foldr (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks3 |> quadsToMesh
+                List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] bricks3 |> quadsToMesh
 
             else
                 model.brickMesh
@@ -1736,7 +1738,7 @@ updateFromBackend msg model =
                 | userId = Just userId
                 , bricks = bricks
                 , brickMesh =
-                    List.foldr (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks
+                    List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] bricks
                         |> quadsToMesh
               }
             , Command.none
@@ -1757,7 +1759,7 @@ updateFromBackend msg model =
             ( { model
                 | bricks = bricks
                 , brickMesh =
-                    List.foldr (\brick mesh -> brickMesh model.startTime brick ++ mesh) [] bricks
+                    List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] bricks
                         |> quadsToMesh
               }
             , Command.none
@@ -2036,9 +2038,9 @@ drawPreviewBrick viewPosition xrView matrix model =
             (Time.millisToPosix 0)
             (mat4ToPoint3d matrix)
             model.brickSize
-            (Vec4.vec4 0.2 0.2 1 0.3)
+            (Color.rgb255 40 40 255)
             model.bricks
-            |> brickMesh (Time.millisToPosix 0)
+            |> brickMesh (Time.millisToPosix 0) 0.3
             |> quadsToMesh
         )
         { perspective = xrView.projectionMatrix
@@ -2075,10 +2077,15 @@ square =
 
 square2 : Mesh Vertex
 square2 =
-    [ { position = Vec3.vec3 100 0 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
-    , { position = Vec3.vec3 100 100 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
-    , { position = Vec3.vec3 0 100 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
-    , { position = Vec3.vec3 0 0 0, color = green, normal = Vec3.vec3 0 0 1, shininess = 1 }
+    let
+        color : Vec4
+        color =
+            Color.toVec4 green 1
+    in
+    [ { position = Vec3.vec3 100 0 0, color = color, normal = Vec3.vec3 0 0 1, shininess = 1 }
+    , { position = Vec3.vec3 100 100 0, color = color, normal = Vec3.vec3 0 0 1, shininess = 1 }
+    , { position = Vec3.vec3 0 100 0, color = color, normal = Vec3.vec3 0 0 1, shininess = 1 }
+    , { position = Vec3.vec3 0 0 0, color = color, normal = Vec3.vec3 0 0 1, shininess = 1 }
     ]
         |> quadsToMesh
 

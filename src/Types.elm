@@ -2,6 +2,7 @@ module Types exposing (..)
 
 import Angle exposing (Angle)
 import Browser exposing (UrlRequest)
+import Color exposing (Color)
 import Coord exposing (Coord)
 import Duration exposing (Seconds)
 import Effect.Browser.Navigation
@@ -92,7 +93,7 @@ type alias Input2 =
 
 
 type alias Brick =
-    { min : Coord GridUnit, max : Coord GridUnit, z : Int, color : Vec4, placedAt : Time.Posix }
+    { min : Coord GridUnit, max : Coord GridUnit, z : Int, color : Color, placedAt : Time.Posix }
 
 
 type GridUnit
