@@ -1830,6 +1830,19 @@ view model =
     }
 
 
+ground : Mat4 -> Mat4 -> Vec3 -> Entity
+ground perspective viewMatrix cameraPosition =
+    WebGL.entity
+        vertexShader
+        fragmentShader
+        square2
+        { perspective = perspective
+        , viewMatrix = viewMatrix
+        , modelTransform = Mat4.identity
+        , cameraPosition = cameraPosition
+        }
+
+
 normalModeView : NormalMode -> FrontendModel -> Html.Html msg
 normalModeView normalMode model =
     let
@@ -1874,15 +1887,7 @@ normalModeView normalMode model =
         , Html.Attributes.style "width" (String.fromInt cssWindowWidth ++ "px")
         , Html.Attributes.style "height" (String.fromInt cssWindowHeight ++ "px")
         ]
-        ([ WebGL.entity
-            vertexShader
-            fragmentShader
-            square2
-            { perspective = perspective
-            , viewMatrix = viewMatrix
-            , modelTransform = Mat4.identity
-            , cameraPosition = Point3d.toVec3 normalMode.position
-            }
+        ([ ground perspective viewMatrix (Point3d.toVec3 normalMode.position)
          , WebGL.entityWith
             [ DepthTest.default
             , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
@@ -1997,6 +2002,7 @@ entities model =
                 leftAndRightInputs inputs
         in
         [ clearScreen
+        , ground xrView.projectionMatrix xrView.viewMatrix viewPosition
         ]
             ++ (case model.fontTexture of
                     Loaded fontTexture ->
