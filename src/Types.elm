@@ -25,7 +25,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Speed exposing (MetersPerSecond)
 import Url exposing (Url)
-import User exposing (User, World)
+import User exposing (User, VrUserData, World)
 import Vector3d exposing (Vector3d)
 
 
@@ -53,6 +53,7 @@ type alias FrontendModel =
     , undoHeld : Maybe Time.Posix
     , users : SeqDict (Id UserId) User
     , userId : Maybe (Id UserId)
+    , sentDataLastFrame : Bool
     }
 
 
@@ -86,7 +87,7 @@ type alias Input2 =
     , sideTrigger : Float
     , aButton : Bool
     , bButton : Bool
-    , matrix : Maybe Mat4
+    , position : Maybe (Point3d Meters World)
     , joystickX : Float
     , joystickY : Float
     }
@@ -184,7 +185,8 @@ type FrontendMsg
 type ToBackend
     = NoOpToBackend
     | NewPositionRequest (Point3d Meters World) (Vector3d MetersPerSecond World)
-    | PlaceBricksRequest (Nonempty Brick)
+    | VrUpdateRequest VrUserData (List Brick)
+    | ResetRequest
 
 
 type BackendMsg
@@ -199,4 +201,5 @@ type ToFrontend
     | ConnectedResponse (Id UserId) { bricks : List Brick, users : SeqDict (Id UserId) User }
     | UserConnected (Id UserId)
     | UserDisconnected (Id UserId)
-    | BricksPlaced (Nonempty Brick)
+    | VrPositionChanged (Id UserId) VrUserData (List Brick)
+    | ResetBroadcast

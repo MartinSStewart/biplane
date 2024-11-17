@@ -19,7 +19,7 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera
-import Effect.Subscription as Subscription
+import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Effect.WebGL as WebGL exposing (Entity, Mesh, Shader, XrInput, XrRenderError(..))
@@ -55,7 +55,7 @@ import TriangularMesh
 import Types exposing (..)
 import Unsafe
 import Url
-import User exposing (World)
+import User exposing (User(..), World)
 import Vector3d exposing (Vector3d)
 import WebGL.Matrices
 import WebGL.Settings.Blend as Blend
@@ -75,11 +75,12 @@ app =
         }
 
 
+subscriptions : FrontendModel -> Subscription FrontendOnly FrontendMsg
 subscriptions model =
     Subscription.batch
         [ case model.isInVr of
             IsInMenu ->
-                Subscription.none
+                Effect.Browser.Events.onAnimationFrame AnimationFrame
 
             IsInNormalMode _ ->
                 Subscription.batch
@@ -90,11 +91,11 @@ subscriptions model =
                     , Effect.Browser.Events.onMouseMove (mouseDecoder MouseMoved)
                     , Effect.Browser.Events.onMouseDown (mouseDecoder (\_ _ -> MouseDown))
                     , Ports.pointerLockChange PointerLockChanged
+                    , Effect.Browser.Events.onAnimationFrame AnimationFrame
                     ]
 
             IsInVr ->
                 Subscription.none
-        , Effect.Browser.Events.onAnimationFrame AnimationFrame
         , Effect.Browser.Events.onKeyDown (Json.Decode.map KeyDown (Json.Decode.field "key" Json.Decode.string))
         , Ports.soundsLoaded SoundsLoaded
         , Ports.gotConsoleLog GotConsoleLog
@@ -138,7 +139,7 @@ brickMesh startTime opacity brick =
     let
         placedAt : Float
         placedAt =
-            0
+            Duration.from startTime brick.placedAt |> Duration.inMilliseconds
 
         color : Vec4
         color =
@@ -270,6 +271,7 @@ init url key =
       , undoHeld = Nothing
       , users = SeqDict.empty
       , userId = Nothing
+      , sentDataLastFrame = False
       }
     , Command.batch
         [ Time.now |> Task.perform GotStartTime
@@ -563,7 +565,14 @@ update msg model =
                         | position = moved.position
                         , velocity = moved.velocity
                       }
-                    , NewPositionRequest moved.position moved.velocity |> Effect.Lamdera.sendToBackend
+                    , Command.batch
+                        [ NewPositionRequest moved.position moved.velocity |> Effect.Lamdera.sendToBackend
+                        , if SeqSet.member "Backspace" normalMode.keysDown then
+                            Effect.Lamdera.sendToBackend ResetRequest
+
+                          else
+                            Command.none
+                        ]
                     )
                 )
                 { model | time = time }
@@ -1161,7 +1170,7 @@ noInput =
     , sideTrigger = 0
     , aButton = False
     , bButton = False
-    , matrix = Nothing
+    , position = Nothing
     , joystickX = 0
     , joystickY = 0
     }
@@ -1176,7 +1185,7 @@ inputToButtons input =
             , sideTrigger = sideTrigger.value
             , aButton = aButton.isPressed
             , bButton = bButton.isPressed
-            , matrix = input.matrix
+            , position = Maybe.map mat4ToPoint3d input.matrix
             , joystickX = joystickX
             , joystickY = joystickY
             }
@@ -1325,11 +1334,11 @@ brickAtPoint point brick =
 
 placeBrick : Time.Posix -> Input2 -> Bool -> Bool -> FrontendModel -> PlaceBrick
 placeBrick time input pressedTrigger triggerHeld model =
-    case ( input.matrix, pressedTrigger, triggerHeld ) of
-        ( Just matrix, True, _ ) ->
+    case ( input.position, pressedTrigger, triggerHeld ) of
+        ( Just position, True, _ ) ->
             let
                 brick =
-                    pointToBrick time (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                    pointToBrick time position model.brickSize red model.bricks
             in
             if input.sideTrigger > 0.5 then
                 placeAdjacentBricks time brick model.bricks |> PlaceMany
@@ -1337,12 +1346,12 @@ placeBrick time input pressedTrigger triggerHeld model =
             else
                 PlaceSingle brick
 
-        ( Just matrix, False, True ) ->
+        ( Just position, False, True ) ->
             case model.lastPlacedBrick of
                 Just lastPlacedBrick ->
                     let
                         brick =
-                            pointToBrick time (mat4ToPoint3d matrix) model.brickSize red model.bricks
+                            pointToBrick time position model.brickSize red model.bricks
                     in
                     if brickOverlap lastPlacedBrick brick then
                         PlaceNone
@@ -1545,6 +1554,7 @@ vrUpdate pose model =
                         Nothing
       , users = model.users
       , userId = model.userId
+      , sentDataLastFrame = not model.sentDataLastFrame
       }
     , Command.batch
         [ WebGL.renderXrFrame (entities model) |> Task.attempt RenderedXrFrame
@@ -1579,15 +1589,26 @@ vrUpdate pose model =
 
             Nothing ->
                 Command.none
-        , case maybeBrick of
-            PlaceMany bricks ->
-                Effect.Lamdera.sendToBackend (PlaceBricksRequest bricks)
+        , if not model.sentDataLastFrame || maybeBrick /= PlaceNone then
+            VrUpdateRequest
+                { leftHand = leftInput.position
+                , rightHand = rightInput.position
+                , head = mat4ToPoint3d pose.transform
+                }
+                (case maybeBrick of
+                    PlaceMany bricks ->
+                        List.Nonempty.toList bricks
 
-            PlaceSingle brick ->
-                Nonempty brick [] |> PlaceBricksRequest |> Effect.Lamdera.sendToBackend
+                    PlaceSingle brick ->
+                        [ brick ]
 
-            PlaceNone ->
-                Command.none
+                    PlaceNone ->
+                        []
+                )
+                |> Effect.Lamdera.sendToBackend
+
+          else
+            Command.none
         ]
     )
 
@@ -1723,7 +1744,7 @@ updateFromBackend msg model =
                 | users =
                     SeqDict.updateIfExists
                         userId
-                        (\user -> { user | position = position, velocity = velocity })
+                        (\_ -> NormalUser { position = position, velocity = velocity })
                         model.users
               }
             , Command.none
@@ -1747,20 +1768,24 @@ updateFromBackend msg model =
         UserDisconnected userId ->
             ( { model | users = SeqDict.remove userId model.users }, Command.none )
 
-        BricksPlaced nonempty ->
+        VrPositionChanged userId data newBricks ->
             let
                 bricks : List Brick
                 bricks =
-                    List.Nonempty.toList nonempty ++ model.bricks
+                    List.map (\brick -> { brick | placedAt = model.time }) newBricks ++ model.bricks
             in
             ( { model
                 | bricks = bricks
                 , brickMesh =
                     List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] bricks
                         |> quadsToMesh
+                , users = SeqDict.insert userId (VrUser data) model.users
               }
             , Command.none
             )
+
+        ResetBroadcast ->
+            ( { model | bricks = [], brickMesh = WebGL.indexedTriangles [] [] }, Command.none )
 
 
 view : FrontendModel -> Browser.Document FrontendMsg
@@ -1861,8 +1886,7 @@ normalModeView normalMode model =
          , WebGL.entityWith
             [ DepthTest.default
             , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
-
-            --, blend
+            , blend
             ]
             brickVertexShader
             brickFragmentShader
@@ -1870,7 +1894,7 @@ normalModeView normalMode model =
             { perspective = perspective
             , viewMatrix = viewMatrix
             , modelTransform = Mat4.identity
-            , elapsedTime = 1000 --Duration.from model.startTime model.time |> Duration.inMilliseconds
+            , elapsedTime = Duration.from model.startTime model.time |> Duration.inMilliseconds
             }
          ]
             ++ drawPlayers perspective viewMatrix model
@@ -1879,21 +1903,64 @@ normalModeView normalMode model =
 
 drawPlayers : Mat4 -> Mat4 -> FrontendModel -> List Entity
 drawPlayers perspective viewMatrix model =
-    List.filterMap
+    List.concatMap
         (\( userId, user ) ->
             if Just userId == model.userId then
-                Nothing
+                []
 
             else
-                WebGL.entity
-                    flatVertexShader
-                    flatFragmentShader
-                    sphere2
-                    { perspective = perspective
-                    , viewMatrix = viewMatrix
-                    , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 user.position)
-                    }
-                    |> Just
+                case user of
+                    NormalUser { position } ->
+                        [ WebGL.entity
+                            flatVertexShader
+                            flatFragmentShader
+                            sphere2
+                            { perspective = perspective
+                            , viewMatrix = viewMatrix
+                            , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 position)
+                            }
+                        ]
+
+                    VrUser data ->
+                        [ WebGL.entity
+                            flatVertexShader
+                            flatFragmentShader
+                            headSphere
+                            { perspective = perspective
+                            , viewMatrix = viewMatrix
+                            , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 data.head)
+                            }
+                        ]
+                            ++ (case data.leftHand of
+                                    Just position ->
+                                        [ WebGL.entity
+                                            flatVertexShader
+                                            flatFragmentShader
+                                            handSphere
+                                            { perspective = perspective
+                                            , viewMatrix = viewMatrix
+                                            , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 position)
+                                            }
+                                        ]
+
+                                    Nothing ->
+                                        []
+                               )
+                            ++ (case data.rightHand of
+                                    Just position ->
+                                        [ WebGL.entity
+                                            flatVertexShader
+                                            flatFragmentShader
+                                            handSphere
+                                            { perspective = perspective
+                                            , viewMatrix = viewMatrix
+                                            , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 position)
+                                            }
+                                        ]
+
+                                    Nothing ->
+                                        []
+                               )
         )
         (SeqDict.toList model.users)
 
@@ -1987,17 +2054,17 @@ entities model =
                         ]
                             ++ (case model.lastUsedInput of
                                     WebGL.LeftHand ->
-                                        case leftInput.matrix of
-                                            Just matrix ->
-                                                [ drawPreviewBrick viewPosition xrView matrix model ]
+                                        case leftInput.position of
+                                            Just position ->
+                                                [ drawPreviewBrick viewPosition xrView position model ]
 
                                             Nothing ->
                                                 []
 
                                     WebGL.RightHand ->
-                                        case rightInput.matrix of
-                                            Just matrix ->
-                                                [ drawPreviewBrick viewPosition xrView matrix model ]
+                                        case rightInput.position of
+                                            Just position ->
+                                                [ drawPreviewBrick viewPosition xrView position model ]
 
                                             Nothing ->
                                                 []
@@ -2028,8 +2095,8 @@ entities model =
             ++ drawPlayers xrView.projectionMatrix xrView.viewMatrix model
 
 
-drawPreviewBrick : Vec3 -> WebGL.XrView -> Mat4 -> FrontendModel -> Entity
-drawPreviewBrick viewPosition xrView matrix model =
+drawPreviewBrick : Vec3 -> WebGL.XrView -> Point3d Meters World -> FrontendModel -> Entity
+drawPreviewBrick viewPosition xrView position model =
     WebGL.entityWith
         [ DepthTest.default
         , Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
@@ -2039,7 +2106,7 @@ drawPreviewBrick viewPosition xrView matrix model =
         brickFragmentShader
         (pointToBrick
             (Time.millisToPosix 0)
-            (mat4ToPoint3d matrix)
+            position
             model.brickSize
             (Color.rgb255 40 40 255)
             model.bricks
@@ -2128,7 +2195,21 @@ sphere1 =
 
 sphere2 : Mesh FlatVertex
 sphere2 =
-    sphereFlatShading (Vec4.vec4 0.05 0.05 0.05 1) (Point3d.meters 0 0 0) (Length.inMeters playerWidth / 2) 8
+    sphereFlatShading
+        (Vec4.vec4 0.05 0.05 0.05 1)
+        (Point3d.meters 0 0 (Length.millimeters -18 |> Length.inMeters))
+        (1.1 * Length.inMeters playerWidth / 2)
+        8
+
+
+handSphere : Mesh FlatVertex
+handSphere =
+    sphereFlatShading (Vec4.vec4 0.95 0.95 0.95 1) (Point3d.meters 0 0 0) 0.05 8
+
+
+headSphere : Mesh FlatVertex
+headSphere =
+    sphereFlatShading (Vec4.vec4 0.95 0.95 0.95 1) (Point3d.meters 0 0 0) 0.1 8
 
 
 sphere : Float -> Vec4 -> Point3d u c -> Float -> Int -> Mesh Vertex

@@ -9,7 +9,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import SeqDict
 import Types exposing (..)
-import User
+import User exposing (User(..))
 
 
 app :
@@ -141,38 +141,46 @@ updateFromFrontend sessionId clientId msg model =
         NewPositionRequest position velocity ->
             case SeqDict.get sessionId model.sessions of
                 Just userId ->
-                    case SeqDict.get userId model.users of
-                        Just user ->
-                            ( { model
-                                | users =
-                                    SeqDict.insert
-                                        userId
-                                        { user | position = position, velocity = velocity }
-                                        model.users
-                              }
-                            , Effect.Lamdera.broadcast (UserPositionChanged userId position velocity)
-                            )
-
-                        Nothing ->
-                            ( model, Command.none )
+                    ( { model
+                        | users =
+                            SeqDict.insert
+                                userId
+                                (NormalUser { position = position, velocity = velocity })
+                                model.users
+                      }
+                    , Effect.Lamdera.broadcast (UserPositionChanged userId position velocity)
+                    )
 
                 Nothing ->
                     ( model, Command.none )
 
-        PlaceBricksRequest bricks ->
-            ( { model | bricks = List.Nonempty.toList bricks ++ model.bricks }
-            , List.concatMap
-                (\clientIds ->
-                    List.map
-                        (\clientId2 ->
-                            if clientId == clientId2 then
-                                Command.none
+        VrUpdateRequest data newBricks ->
+            case SeqDict.get sessionId model.sessions of
+                Just userId ->
+                    ( { model
+                        | bricks = newBricks ++ model.bricks
+                        , users = SeqDict.insert userId (VrUser data) model.users
+                      }
+                    , List.concatMap
+                        (\clientIds ->
+                            List.map
+                                (\clientId2 ->
+                                    if clientId == clientId2 then
+                                        Command.none
 
-                            else
-                                Effect.Lamdera.sendToFrontend clientId2 (BricksPlaced bricks)
+                                    else
+                                        Effect.Lamdera.sendToFrontend
+                                            clientId2
+                                            (VrPositionChanged userId data newBricks)
+                                )
+                                (List.Nonempty.toList clientIds)
                         )
-                        (List.Nonempty.toList clientIds)
-                )
-                (SeqDict.values model.connections)
-                |> Command.batch
-            )
+                        (SeqDict.values model.connections)
+                        |> Command.batch
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        ResetRequest ->
+            ( { model | bricks = [] }, Effect.Lamdera.broadcast ResetBroadcast )
