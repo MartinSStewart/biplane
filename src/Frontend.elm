@@ -543,7 +543,7 @@ update msg model =
                                         , y = v.y * 0.85
                                         , z =
                                             if SeqSet.member " " normalMode.keysDown && canJump v.z then
-                                                0.7
+                                                0.5
 
                                             else
                                                 v.z
@@ -1594,7 +1594,7 @@ vrUpdate pose model =
 
 gravity : Vector3d MetersPerSecondSquared World
 gravity =
-    Vector3d.metersPerSecondSquared 0 0 -2
+    Vector3d.metersPerSecondSquared 0 0 -1.8
 
 
 mat4ToFrame3d : Mat4 -> Frame3d u c d
@@ -1729,17 +1729,14 @@ updateFromBackend msg model =
             , Command.none
             )
 
-        ConnectedResponse userId bricks ->
-            let
-                _ =
-                    Debug.log "bricks count" bricks
-            in
+        ConnectedResponse userId data ->
             ( { model
                 | userId = Just userId
-                , bricks = bricks
+                , bricks = data.bricks
                 , brickMesh =
-                    List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] bricks
+                    List.foldr (\brick mesh -> brickMesh model.startTime 1 brick ++ mesh) [] data.bricks
                         |> quadsToMesh
+                , users = data.users
               }
             , Command.none
             )
@@ -1876,24 +1873,29 @@ normalModeView normalMode model =
             , elapsedTime = 1000 --Duration.from model.startTime model.time |> Duration.inMilliseconds
             }
          ]
-            ++ List.filterMap
-                (\( userId, user ) ->
-                    if Just userId == model.userId then
-                        Nothing
-
-                    else
-                        WebGL.entity
-                            flatVertexShader
-                            flatFragmentShader
-                            sphere2
-                            { perspective = perspective
-                            , viewMatrix = viewMatrix
-                            , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 user.position)
-                            }
-                            |> Just
-                )
-                (SeqDict.toList model.users)
+            ++ drawPlayers perspective viewMatrix model
         )
+
+
+drawPlayers : Mat4 -> Mat4 -> FrontendModel -> List Entity
+drawPlayers perspective viewMatrix model =
+    List.filterMap
+        (\( userId, user ) ->
+            if Just userId == model.userId then
+                Nothing
+
+            else
+                WebGL.entity
+                    flatVertexShader
+                    flatFragmentShader
+                    sphere2
+                    { perspective = perspective
+                    , viewMatrix = viewMatrix
+                    , modelMatrix = Mat4.makeTranslate (Point3d.toVec3 user.position)
+                    }
+                    |> Just
+        )
+        (SeqDict.toList model.users)
 
 
 zNormal =
@@ -1907,10 +1909,10 @@ clearScreen =
         flatVertexShader
         flatFragmentShader
         (quadsToMesh
-            [ { position = Vec3.vec3 -1 -1 1, color = Vec4.vec4 0 0 0 1 }
-            , { position = Vec3.vec3 1 -1 1, color = Vec4.vec4 0 0 0 1 }
-            , { position = Vec3.vec3 1 1 1, color = Vec4.vec4 0 0 0 1 }
-            , { position = Vec3.vec3 -1 1 1, color = Vec4.vec4 0 0 0 1 }
+            [ { position = Vec3.vec3 -1 -1 1, color = Vec4.vec4 0.5 0.6 1 1 }
+            , { position = Vec3.vec3 1 -1 1, color = Vec4.vec4 0.5 0.6 1 1 }
+            , { position = Vec3.vec3 1 1 1, color = Vec4.vec4 0.5 0.6 1 1 }
+            , { position = Vec3.vec3 -1 1 1, color = Vec4.vec4 0.5 0.6 1 1 }
             ]
         )
         { viewMatrix = Mat4.identity, modelMatrix = Mat4.identity, perspective = Mat4.identity }
@@ -2023,6 +2025,7 @@ entities model =
                 else
                     []
                )
+            ++ drawPlayers xrView.projectionMatrix xrView.viewMatrix model
 
 
 drawPreviewBrick : Vec3 -> WebGL.XrView -> Mat4 -> FrontendModel -> Entity

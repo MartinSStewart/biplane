@@ -196,7 +196,7 @@ type BackendMsg
 type ToFrontend
     = NoOpToFrontend
     | UserPositionChanged (Id UserId) (Point3d Meters World) (Vector3d MetersPerSecond World)
-    | ConnectedResponse (Id UserId) (List Brick)
+    | ConnectedResponse (Id UserId) { bricks : List Brick, users : SeqDict (Id UserId) User }
     | UserConnected (Id UserId)
     | UserDisconnected (Id UserId)
     | BricksPlaced (Nonempty Brick)

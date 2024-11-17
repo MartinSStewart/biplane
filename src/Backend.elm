@@ -85,7 +85,8 @@ update msg model =
                 Just userId ->
                     ( model2
                     , Command.batch
-                        [ ConnectedResponse userId model.bricks |> Effect.Lamdera.sendToFrontend clientId
+                        [ ConnectedResponse userId { bricks = model.bricks, users = model.users }
+                            |> Effect.Lamdera.sendToFrontend clientId
                         , Effect.Lamdera.broadcast (UserConnected userId)
                         ]
                     )
@@ -102,7 +103,8 @@ update msg model =
                         , sessions = SeqDict.insert sessionId userId model.sessions
                       }
                     , Command.batch
-                        [ ConnectedResponse userId model.bricks |> Effect.Lamdera.sendToFrontend clientId
+                        [ ConnectedResponse userId { bricks = model.bricks, users = model.users }
+                            |> Effect.Lamdera.sendToFrontend clientId
                         , Effect.Lamdera.broadcast (UserConnected userId)
                         ]
                     )
@@ -158,10 +160,6 @@ updateFromFrontend sessionId clientId msg model =
                     ( model, Command.none )
 
         PlaceBricksRequest bricks ->
-            let
-                _ =
-                    Debug.log "bricks" bricks
-            in
             ( { model | bricks = List.Nonempty.toList bricks ++ model.bricks }
             , List.concatMap
                 (\clientIds ->
