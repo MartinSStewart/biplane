@@ -180,7 +180,7 @@ updateFromFrontend sessionId clientId msg model =
                     ( model, Command.none )
 
         ResetRequest ->
-            ( { model | bricks = [] }, Effect.Lamdera.broadcast ResetBroadcast )
+            ( { model | bricks = [], vrFrameTiming = [] }, Effect.Lamdera.broadcast ResetBroadcast )
 
 
 broadcastToOthers : ClientId -> ToFrontend -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
