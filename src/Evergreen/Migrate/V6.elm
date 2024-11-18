@@ -49,7 +49,7 @@ frontendModel old =
 
 backendModel : Evergreen.V3.Types.BackendModel -> ModelMigration Evergreen.V6.Types.BackendModel Evergreen.V6.Types.BackendMsg
 backendModel old =
-    ModelMigrated ( migrate_Types_BackendModel old, Cmd.none )
+    ModelReset
 
 
 frontendMsg : Evergreen.V3.Types.FrontendMsg -> MsgMigration Evergreen.V6.Types.FrontendMsg Evergreen.V6.Types.FrontendMsg
@@ -59,7 +59,7 @@ frontendMsg old =
 
 toBackend : Evergreen.V3.Types.ToBackend -> MsgMigration Evergreen.V6.Types.ToBackend Evergreen.V6.Types.BackendMsg
 toBackend old =
-    MsgMigrated ( migrate_Types_ToBackend old, Cmd.none )
+    MsgOldValueIgnored
 
 
 backendMsg : Evergreen.V3.Types.BackendMsg -> MsgMigration Evergreen.V6.Types.BackendMsg Evergreen.V6.Types.BackendMsg
@@ -70,121 +70,3 @@ backendMsg old =
 toFrontend : Evergreen.V3.Types.ToFrontend -> MsgMigration Evergreen.V6.Types.ToFrontend Evergreen.V6.Types.FrontendMsg
 toFrontend old =
     MsgUnchanged
-
-
-migrate_Types_BackendModel : Evergreen.V3.Types.BackendModel -> Evergreen.V6.Types.BackendModel
-migrate_Types_BackendModel old =
-    ModelReset
-
-
-migrate_Color_Color : Evergreen.V3.Color.Color -> Evergreen.V6.Color.Color
-migrate_Color_Color old =
-    case old of
-        Evergreen.V3.Color.Color p0 ->
-            Evergreen.V6.Color.Color p0
-
-
-migrate_Coord_Coord : (units_old -> units_new) -> Evergreen.V3.Coord.Coord units_old -> Evergreen.V6.Coord.Coord units_new
-migrate_Coord_Coord migrate_units old =
-    old |> Tuple.mapBoth migrate_Quantity_Quantity migrate_Quantity_Quantity
-
-
-migrate_Geometry_Types_Point3d : Evergreen.V3.Geometry.Types.Point3d units_old coordinates_old -> Evergreen.V6.Geometry.Types.Point3d units_new coordinates_new
-migrate_Geometry_Types_Point3d old =
-    case old of
-        Evergreen.V3.Geometry.Types.Point3d p0 ->
-            Evergreen.V6.Geometry.Types.Point3d p0
-
-
-migrate_Geometry_Types_Vector3d : Evergreen.V3.Geometry.Types.Vector3d units_old coordinates_old -> Evergreen.V6.Geometry.Types.Vector3d units_new coordinates_new
-migrate_Geometry_Types_Vector3d old =
-    case old of
-        Evergreen.V3.Geometry.Types.Vector3d p0 ->
-            Evergreen.V6.Geometry.Types.Vector3d p0
-
-
-migrate_Id_Id : Evergreen.V3.Id.Id a_old -> Evergreen.V6.Id.Id a_new
-migrate_Id_Id old =
-    case old of
-        Evergreen.V3.Id.Id p0 ->
-            Evergreen.V6.Id.Id p0
-
-
-migrate_Point3d_Point3d : (units_old -> units_new) -> (coordinates_old -> coordinates_new) -> Evergreen.V3.Point3d.Point3d units_old coordinates_old -> Evergreen.V6.Point3d.Point3d units_new coordinates_new
-migrate_Point3d_Point3d migrate_units migrate_coordinates old =
-    old |> migrate_Geometry_Types_Point3d
-
-
-migrate_Quantity_Quantity : Quantity.Quantity number units -> Quantity.Quantity number units2
-migrate_Quantity_Quantity old =
-    Quantity.unwrap old |> Quantity.unsafe
-
-
-migrate_Types_Brick : Evergreen.V3.Types.Brick -> Evergreen.V6.Types.Brick
-migrate_Types_Brick old =
-    { min = old.min |> migrate_Coord_Coord migrate_Types_GridUnit
-    , max = old.max |> migrate_Coord_Coord migrate_Types_GridUnit
-    , z = old.z
-    , color = old.color |> migrate_Color_Color
-    , placedAt = old.placedAt
-    }
-
-
-migrate_Types_GridUnit : Evergreen.V3.Types.GridUnit -> Evergreen.V6.Types.GridUnit
-migrate_Types_GridUnit old =
-    case old of
-        Evergreen.V3.Types.GridUnit p0 ->
-            Evergreen.V6.Types.GridUnit p0
-
-
-migrate_Types_ToBackend : Evergreen.V3.Types.ToBackend -> Evergreen.V6.Types.ToBackend
-migrate_Types_ToBackend old =
-    case old of
-        Evergreen.V3.Types.NoOpToBackend ->
-            Evergreen.V6.Types.NoOpToBackend
-
-        Evergreen.V3.Types.NewPositionRequest p0 p1 ->
-            Evergreen.V6.Types.NewPositionRequest (p0 |> migrate_Point3d_Point3d identity migrate_User_World)
-                (p1 |> migrate_Vector3d_Vector3d identity migrate_User_World)
-
-        Evergreen.V3.Types.VrUpdateRequest p0 p1 p2 ->
-            Evergreen.V6.Types.VrUpdateRequest (p0 |> migrate_User_VrUserData)
-                (p1 |> List.map migrate_Types_Brick)
-                p2
-                (Unimplemented {- This new variant needs to be initialised -})
-
-        Evergreen.V3.Types.ResetRequest ->
-            Evergreen.V6.Types.ResetRequest
-
-
-migrate_User_User : Evergreen.V3.User.User -> Evergreen.V6.User.User
-migrate_User_User old =
-    case old of
-        Evergreen.V3.User.NormalUser p0 ->
-            Evergreen.V6.User.NormalUser
-                { position = p0.position |> migrate_Point3d_Point3d identity migrate_User_World
-                , velocity = p0.velocity |> migrate_Vector3d_Vector3d identity migrate_User_World
-                }
-
-        Evergreen.V3.User.VrUser p0 ->
-            Evergreen.V6.User.VrUser (p0 |> migrate_User_VrUserData)
-
-
-migrate_User_VrUserData : Evergreen.V3.User.VrUserData -> Evergreen.V6.User.VrUserData
-migrate_User_VrUserData old =
-    { leftHand = old.leftHand |> Maybe.map (migrate_Point3d_Point3d identity migrate_User_World)
-    , rightHand = old.rightHand |> Maybe.map (migrate_Point3d_Point3d identity migrate_User_World)
-    , head = old.head |> migrate_Point3d_Point3d identity migrate_User_World
-    }
-
-
-migrate_User_World : Evergreen.V3.User.World -> Evergreen.V6.User.World
-migrate_User_World old =
-    case old of
-        Evergreen.V3.User.World p0 ->
-            Evergreen.V6.User.World p0
-
-
-migrate_Vector3d_Vector3d : (units_old -> units_new) -> (coordinates_old -> coordinates_new) -> Evergreen.V3.Vector3d.Vector3d units_old coordinates_old -> Evergreen.V6.Vector3d.Vector3d units_new coordinates_new
-migrate_Vector3d_Vector3d migrate_units migrate_coordinates old =
-    old |> migrate_Geometry_Types_Vector3d
