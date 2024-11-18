@@ -51,6 +51,7 @@ init =
       , connections = SeqDict.empty
       , userIdCounter = 0
       , bricks = []
+      , vrFrameTiming = []
       }
     , Command.none
     )
@@ -159,7 +160,7 @@ updateFromFrontend sessionId clientId msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VrUpdateRequest data newBricks undoLast ->
+        VrUpdateRequest data newBricks undoLast vrFrameDuration ->
             case SeqDict.get sessionId model.sessions of
                 Just userId ->
                     ( { model
@@ -170,6 +171,7 @@ updateFromFrontend sessionId clientId msg model =
                             else
                                 newBricks ++ model.bricks
                         , users = SeqDict.insert userId (VrUser data) model.users
+                        , vrFrameTiming = vrFrameDuration :: model.vrFrameTiming
                       }
                     , broadcastToOthers clientId (VrPositionChanged userId data newBricks undoLast) model
                     )

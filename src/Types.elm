@@ -4,7 +4,7 @@ import Angle exposing (Angle)
 import Browser exposing (UrlRequest)
 import Color exposing (Color)
 import Coord exposing (Coord)
-import Duration exposing (Seconds)
+import Duration exposing (Duration, Seconds)
 import Effect.Browser.Navigation
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
@@ -155,6 +155,7 @@ type alias BackendModel =
     , connections : SeqDict SessionId (Nonempty ClientId)
     , userIdCounter : Int
     , bricks : List Brick
+    , vrFrameTiming : List Duration
     }
 
 
@@ -185,7 +186,7 @@ type FrontendMsg
 type ToBackend
     = NoOpToBackend
     | NewPositionRequest (Point3d Meters World) (Vector3d MetersPerSecond World)
-    | VrUpdateRequest VrUserData (List Brick) Bool
+    | VrUpdateRequest VrUserData (List Brick) Bool Duration
     | ResetRequest
 
 

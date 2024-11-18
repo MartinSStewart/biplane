@@ -1589,8 +1589,8 @@ vrUpdate pose model =
 
             Nothing ->
                 Command.none
-        , case ( model.sentDataLastFrame, pressedUndoAt, maybeBrick ) of
-            ( True, Nothing, PlaceNone ) ->
+        , case ( {- model.sentDataLastFrame, -} pressedUndoAt, maybeBrick ) of
+            ( Nothing, PlaceNone ) ->
                 Command.none
 
             _ ->
@@ -1616,6 +1616,7 @@ vrUpdate pose model =
                         Nothing ->
                             False
                     )
+                    elapsedTime
                     |> Effect.Lamdera.sendToBackend
         ]
     )
