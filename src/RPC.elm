@@ -2,16 +2,17 @@ module RPC exposing (..)
 
 import Duration
 import Json.Encode
-import LamderaRPC exposing (Body(..))
+import LamderaRPC exposing (HttpRequest)
 import Types exposing (BackendModel, BackendMsg(..))
 
 
 lamdera_handleEndpoints :
-    LamderaRPC.RPCArgs
+    Json.Encode.Value
+    -> HttpRequest
     -> BackendModel
     -> ( LamderaRPC.RPCResult, BackendModel, Cmd BackendMsg )
-lamdera_handleEndpoints args model =
-    case args.endpoint of
+lamdera_handleEndpoints body request model =
+    case request.endpoint of
         "timing" ->
             ( LamderaRPC.ResultJson
                 (Json.Encode.list
